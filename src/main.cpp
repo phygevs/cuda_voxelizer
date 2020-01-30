@@ -5,6 +5,9 @@
 // Standard libs
 #include <string>
 #include <cstdio>
+#include <sstream>
+#include <map>
+
 // GLM for maths
 #define GLM_FORCE_PURE
 #include <glm/glm.hpp>
@@ -19,53 +22,139 @@
 // CPU voxelizer fallback
 #include "cpu_voxelizer.h"
 
+#include <boost/filesystem.hpp>
+#include <boost/program_options.hpp>
+
 using namespace std;
-string version_number = "v0.4.4";
+using namespace boost::program_options;
+using namespace boost::filesystem;
+
+constexpr char* version_number = "v0.4.4";
 
 // Forward declaration of CUDA functions
-float* meshToGPU_thrust(const trimesh::TriMesh *mesh); // METHOD 3 to transfer triangles can be found in thrust_operations.cu(h)
+float* meshToGPU_thrust(const trimesh::TriMesh* mesh); // METHOD 3 to transfer triangles can be found in thrust_operations.cu(h)
 void cleanup_thrust();
-void voxelize(const voxinfo & v, float* triangle_data, unsigned int* vtable, bool useThrustPath, bool morton_code);
+void voxelize(const voxinfo& v, float* triangle_data, unsigned int* vtable, bool useThrustPath, bool morton_code);
 
 // Output formats
-enum class OutputFormat { output_binvox = 0, output_morton = 1, output_obj = 2};
-char *OutputFormats[] = { "binvox file", "morton encoded blob", "obj file"};
+enum  OutputFormat { output_binvox = 0, output_morton = 1, output_obj = 2 };
 
-// Default options
-string filename = "";
-string filename_base = "";
-OutputFormat outputformat = OutputFormat::output_binvox;
-unsigned int gridsize = 256;
-bool useThrustPath = false;
-bool forceCPU = false;
+const map<string, OutputFormat> formats{
+	{ "binvox", OutputFormat::output_binvox},
+	{ "morton", OutputFormat::output_morton},
+	{ "obj",  OutputFormat::output_obj}
+};
 
-void printHeader(){
-	fprintf(stdout, "## CUDA VOXELIZER \n");
-	cout << "CUDA Voxelizer " << version_number << " by Jeroen Baert" << endl; 
-	cout << "github.com/Forceflow/cuda_voxelizer - mail@jeroen-baert.be" << endl;
+constexpr char* input_file_arg_name{ "file" };
+constexpr char* input_file_arg_short_name{ "f" };
+constexpr char* voxel_resol_arg_name{ "vres" };
+constexpr char* voxel_resol_arg_short_name{ "s" };
+constexpr char* output_fromat_arg_name{ "oformat" };
+constexpr char* output_fromat_arg_short_name{ "o" };
+constexpr char* cpu_arg_name{ "cpu" };
+constexpr char* trust_lib_arg_name{ "cutrust" };
+constexpr char* trust_lib_arg_short_name{ "t" };
+
+istream& operator>>(istream& in, OutputFormat& format)
+{
+	string token;
+
+	in >> token;
+
+	try
+	{
+		format = formats.at(token);
+	}
+	catch (out_of_range & exc)
+	{
+		in.setstate(ios_base::failbit);
+	}
+
+	return in;
 }
 
-void printExample() {
-	cout << "Example: cuda_voxelizer -f /home/jeroen/bunny.ply -s 512" << endl;
+auto parse_cli_args(int argc, char** argv)
+{
+	string model{ input_file_arg_name };
+	model += ',';
+	model += input_file_arg_short_name;
+
+	string voxel_resol{ voxel_resol_arg_name };
+	voxel_resol += ',';
+	voxel_resol += voxel_resol_arg_short_name;
+
+	string format_arg{ output_fromat_arg_name };
+	format_arg += ',';
+	format_arg += output_fromat_arg_short_name;
+
+	string cuda_trust_arg{ trust_lib_arg_name };
+	cuda_trust_arg += ',';
+	cuda_trust_arg += trust_lib_arg_short_name;
+
+	ostringstream description;
+	description << "## CUDA VOXELIZER\n" << "CUDA Voxelizer" << version_number << " by Jeroen Baert" << endl << "Original code: https://github.com/Forceflow/cuda_voxelizer - mail@jeroen-baert.be" << endl << "Fork: https://github.com/KernelA/cuda_voxelizer" << endl << "Example: cuda_voxelizer -f bunny.ply -s 512 -t" << endl << "Options";
+
+	options_description desc{ description.str() };
+
+	ostringstream all_formats;
+
+	all_formats << "output format: ";
+
+	for (const auto& name : formats)
+	{
+		all_formats << name.first << ' ';
+	}
+
+	desc.add_options()
+		("help,h", "Print help")
+		(model.c_str(), value<string>(), "<path to model file: .ply, .obj, .3ds> (required)")
+		(voxel_resol.c_str(), value<int>()->default_value(256), "<voxelization grid size, power of 2: 8 -> 512, 1024, ... >")
+		(format_arg.c_str(), value<OutputFormat>()->default_value(OutputFormat::output_binvox), all_formats.str().c_str())
+		(cuda_trust_arg.c_str(), bool_switch(), "Force using CUDA Thrust Library (possible speedup / throughput improvement)")
+		(cpu_arg_name, bool_switch(), "Force voxelization on the CPU instead of GPU.For when a CUDA device is not detected / compatible, or for very small models where GPU call overhead is not worth it")
+		;
+
+	variables_map vm;
+	store(parse_command_line(argc, argv, desc), vm);
+	notify(vm);
+
+	return make_tuple(vm, desc);
 }
 
-void printHelp(){
-	fprintf(stdout, "\n## HELP  \n");
-	cout << "Program options: " << endl;
-	cout << " -f <path to model file: .ply, .obj, .3ds> (required)" << endl;
-	cout << " -s <voxelization grid size, power of 2: 8 -> 512, 1024, ... (default: 256)>" << endl;
-	cout << " -o <output format: binvox, obj or morton (default: binvox)>" << endl;
-	cout << " -t : Force using CUDA Thrust Library (possible speedup / throughput improvement)" << endl;
-	printExample();
+bool validate_args(const variables_map& args, const options_description& desc)
+{
+	if (args.count(input_file_arg_name) != 1)
+	{
+		cerr << input_file_arg_name << " required argument" << endl;
+		return false;
+	}
+
+	path input_file{ args[input_file_arg_name].as<string>() };
+
+	if (status(input_file).type() != file_type::regular_file)
+	{
+		cerr << input_file << " is not file or does not exist." << endl;
+		return false;
+	}
+
+	int voxel_resol{ args[voxel_resol_arg_name].as<int>() };
+
+	if (voxel_resol <= 0)
+	{
+		cerr << "Voxel grid size order must be positive. Actual value is " << voxel_resol << endl;
+		return false;
+	}
+
+	return true;
 }
 
 // METHOD 1: Helper function to transfer triangles to automatically managed CUDA memory ( > CUDA 7.x)
-float* meshToGPU_managed(const trimesh::TriMesh *mesh) {
+float* meshToGPU_managed(const trimesh::TriMesh* mesh) {
 	Timer t; t.start();
 	size_t n_floats = sizeof(float) * 9 * (mesh->faces.size());
 	float* device_triangles;
 	fprintf(stdout, "[Mesh] Allocating %s of CUDA-managed UNIFIED memory for triangle data \n", (readableSize(n_floats)).c_str());
-	checkCudaErrors(cudaMallocManaged((void**) &device_triangles, n_floats)); // managed memory
+	checkCudaErrors(cudaMallocManaged((void**)&device_triangles, n_floats)); // managed memory
 	fprintf(stdout, "[Mesh] Copy %llu triangles to CUDA-managed UNIFIED memory \n", (size_t)(mesh->faces.size()));
 	for (size_t i = 0; i < mesh->faces.size(); i++) {
 		glm::vec3 v0 = trimesh_to_glm<trimesh::point>(mesh->vertices[mesh->faces[i][0]]);
@@ -73,10 +162,10 @@ float* meshToGPU_managed(const trimesh::TriMesh *mesh) {
 		glm::vec3 v2 = trimesh_to_glm<trimesh::point>(mesh->vertices[mesh->faces[i][2]]);
 		size_t j = i * 9;
 		memcpy((device_triangles)+j, glm::value_ptr(v0), sizeof(glm::vec3));
-		memcpy((device_triangles)+j+3, glm::value_ptr(v1), sizeof(glm::vec3));
-		memcpy((device_triangles)+j+6, glm::value_ptr(v2), sizeof(glm::vec3));
+		memcpy((device_triangles)+j + 3, glm::value_ptr(v1), sizeof(glm::vec3));
+		memcpy((device_triangles)+j + 6, glm::value_ptr(v2), sizeof(glm::vec3));
 	}
-	t.stop();fprintf(stdout, "[Perf] Mesh transfer time to GPU: %.1f ms \n", t.elapsed_time_milliseconds);
+	t.stop(); fprintf(stdout, "[Perf] Mesh transfer time to GPU: %.1f ms \n", t.elapsed_time_milliseconds);
 
 	//for (size_t i = 0; i < mesh->faces.size(); i++) {
 	//	size_t t = i * 9;
@@ -88,101 +177,52 @@ float* meshToGPU_managed(const trimesh::TriMesh *mesh) {
 	return device_triangles;
 }
 
-//// METHOD 2: Helper function to transfer triangles to old-style, self-managed CUDA memory ( < CUDA 7.x )
-//float* meshToGPU(const trimesh::TriMesh *mesh){
-//	size_t n_floats = sizeof(float) * 9 * (mesh->faces.size());
-//	float* pagelocktriangles;
-//	fprintf(stdout, "Allocating %llu kb of page-locked HOST memory \n", (size_t)(n_floats / 1024.0f));
-//	checkCudaErrors(cudaHostAlloc((void**)&pagelocktriangles, n_floats, cudaHostAllocDefault)); // pinned memory to easily copy from
-//	fprintf(stdout, "Copy %llu triangles to page-locked HOST memory \n", (size_t)(mesh->faces.size()));
-//	for (size_t i = 0; i < mesh->faces.size(); i++){
-//		glm::vec3 v0 = trimesh_to_glm<trimesh::point>(mesh->vertices[mesh->faces[i][0]]);
-//		glm::vec3 v1 = trimesh_to_glm<trimesh::point>(mesh->vertices[mesh->faces[i][1]]);
-//		glm::vec3 v2 = trimesh_to_glm<trimesh::point>(mesh->vertices[mesh->faces[i][2]]);
-//		size_t j = i * 9;
-//		memcpy((pagelocktriangles)+j, glm::value_ptr(v0), sizeof(glm::vec3));
-//		memcpy((pagelocktriangles)+j+3, glm::value_ptr(v1), sizeof(glm::vec3));
-//		memcpy((pagelocktriangles)+j+6, glm::value_ptr(v2), sizeof(glm::vec3));
-//	}
-//	float* device_triangles;
-//	fprintf(stdout, "Allocating %llu kb of DEVICE memory \n", (size_t)(n_floats / 1024.0f));
-//	checkCudaErrors(cudaMalloc((void **) &device_triangles, n_floats));
-//	fprintf(stdout, "Copy %llu triangles from page-locked HOST memory to DEVICE memory \n", (size_t)(mesh->faces.size()));
-//	checkCudaErrors(cudaMemcpy((void *) device_triangles, (void*) pagelocktriangles, n_floats, cudaMemcpyDefault));
-//	return device_triangles;
-//}
+int main(int argc, char* argv[]) {
+	Timer t;
+	t.start();
 
+	variables_map args;
 
+	try
+	{
+		auto res_tuple = parse_cli_args(argc, argv);
+		args = get<0>(res_tuple);
+		auto desc = get<1>(res_tuple);
 
-// Parse the program parameters and set them as global variables
-void parseProgramParameters(int argc, char* argv[]){
-	if(argc<2){ // not enough arguments
-		fprintf(stdout, "Not enough program parameters. \n \n");
-		printHelp();
-		exit(0);
-	} 
-	bool filegiven = false;
-	for (int i = 1; i < argc; i++) {
-		if (string(argv[i]) == "-f") {
-			filename = argv[i + 1];
-			filename_base = filename.substr(0, filename.find_last_of("."));
-			filegiven = true;
-			if (!file_exists(filename)) {
-				fprintf(stdout, "[Err] File does not exist / cannot access: %s \n", filename.c_str());
-				exit(1);
-			}
-			i++;
+		if (args.count("help"))
+		{
+			cout << desc << endl;
+			return 0;
 		}
-		else if (string(argv[i]) == "-s") {
-			gridsize = atoi(argv[i + 1]);
-			i++;
-		} else if (string(argv[i]) == "-h") {
-			printHelp();
-			exit(0);
-		} else if (string(argv[i]) == "-o") {
-			string output = (argv[i + 1]);
-			transform(output.begin(), output.end(), output.begin(), ::tolower); // to lowercase
-			if (output == "binvox"){outputformat = OutputFormat::output_binvox;}
-			else if (output == "morton"){outputformat = OutputFormat::output_morton;}
-			else if (output == "obj"){outputformat = OutputFormat::output_obj;}
-			else {
-				fprintf(stdout, "[Err] Unrecognized output format: %s, valid options are binvox (default) or morton \n", output.c_str());
-				exit(1);
-			}
-		}
-		else if (string(argv[i]) == "-t") {
-			useThrustPath = true;
-		}
-		else if (string(argv[i]) == "-cpu") {
-			forceCPU = true;
+
+		if (!validate_args(args, desc))
+		{
+			cout << desc << endl;
+			return 1;
 		}
 	}
-	if (!filegiven) {
-		fprintf(stdout, "[Err] You didn't specify a file using -f (path). This is required. Exiting. \n");
-		printExample();
-		exit(1);
+	catch (error & err)
+	{
+		cerr << err.what() << endl;
+		return 1;
 	}
-	fprintf(stdout, "[Info] Filename: %s \n", filename.c_str());
-	fprintf(stdout, "[Info] Grid size: %i \n", gridsize);
-	fprintf(stdout, "[Info] Output format: %s \n", OutputFormats[int(outputformat)]);
-	fprintf(stdout, "[Info] Using CUDA Thrust: %s (default: No)\n", useThrustPath ? "Yes" : "No");
-}
 
-int main(int argc, char *argv[]) {
-	Timer t; t.start();
-	printHeader();
-	fprintf(stdout, "\n## PROGRAM PARAMETERS \n");
-	parseProgramParameters(argc, argv);
-	fflush(stdout);
 	trimesh::TriMesh::set_verbose(false);
+
+	path input_file{ args[input_file_arg_name].as<string>() };
+	bool forceCPU{ args[cpu_arg_name].as<bool>() }, useThrustPath{ args[trust_lib_arg_name].as<bool>() };
+	int gridsize{ args[voxel_resol_arg_name].as<int>() };
+	OutputFormat outputformat{ args[output_fromat_arg_name].as< OutputFormat >() };
 
 	// SECTION: Read the mesh from disk using the TriMesh library
 	fprintf(stdout, "\n## READ MESH \n");
 #ifdef _DEBUG
 	trimesh::TriMesh::set_verbose(true);
 #endif
-	fprintf(stdout, "[I/O] Reading mesh from %s \n", filename.c_str());
-	trimesh::TriMesh *themesh = trimesh::TriMesh::read(filename.c_str());
+	cout << "[I/O] Reading mesh from %s \n" << input_file;
+
+	trimesh::TriMesh* themesh = trimesh::TriMesh::read(input_file.string());
+
 	themesh->need_faces(); // Trimesh: Unpack (possible) triangle strips so we have faces for sure
 	fprintf(stdout, "[Mesh] Number of triangles: %zu \n", themesh->faces.size());
 	fprintf(stdout, "[Mesh] Number of vertices: %zu \n", themesh->vertices.size());
@@ -212,7 +252,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	// SECTION: The actual voxelization
-	if (cuda_ok && !forceCPU) { 
+	if (cuda_ok && !forceCPU) {
 		// GPU voxelization
 		fprintf(stdout, "\n## TRIANGLES TO GPU TRANSFER \n");
 
@@ -232,12 +272,13 @@ int main(int argc, char *argv[]) {
 		}
 		fprintf(stdout, "\n## GPU VOXELISATION \n");
 		voxelize(voxelization_info, device_triangles, vtable, useThrustPath, (outputformat == OutputFormat::output_morton));
-	} else { 
+	}
+	else {
 		// CPU VOXELIZATION FALLBACK
 		fprintf(stdout, "\n## CPU VOXELISATION \n");
 		if (!forceCPU) { fprintf(stdout, "[Info] No suitable CUDA GPU was found: Falling back to CPU voxelization\n"); }
 		else { fprintf(stdout, "[Info] Doing CPU voxelization (forced using command-line switch -cpu)\n"); }
-		vtable = (unsigned int*) calloc(1, vtable_size);
+		vtable = (unsigned int*)calloc(1, vtable_size);
 		cpu_voxelizer::cpu_voxelize_mesh(voxelization_info, themesh, vtable, (outputformat == OutputFormat::output_morton));
 	}
 
@@ -248,13 +289,14 @@ int main(int argc, char *argv[]) {
 	//}
 
 	fprintf(stdout, "\n## FILE OUTPUT \n");
-	if (outputformat == OutputFormat::output_morton){
-		write_binary(vtable, vtable_size, filename);
-	} else if (outputformat == OutputFormat::output_binvox){
-		write_binvox(vtable, gridsize, filename);
+	if (outputformat == OutputFormat::output_morton) {
+		write_binary(vtable, vtable_size, input_file.string());
+	}
+	else if (outputformat == OutputFormat::output_binvox) {
+		write_binvox(vtable, gridsize, input_file.string());
 	}
 	else if (outputformat == OutputFormat::output_obj) {
-		write_obj(vtable, gridsize, filename);
+		write_obj(vtable, gridsize, input_file.string());
 	}
 
 	if (useThrustPath) {
@@ -262,5 +304,6 @@ int main(int argc, char *argv[]) {
 	}
 
 	fprintf(stdout, "\n## STATS \n");
-	t.stop(); fprintf(stdout, "[Perf] Total runtime: %.1f ms \n", t.elapsed_time_milliseconds);
+	t.stop();
+	fprintf(stdout, "[Perf] Total runtime: %.1f ms \n", t.elapsed_time_milliseconds);
 }

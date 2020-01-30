@@ -6,6 +6,7 @@ SET(CXX_STANDARD 14)
 
 FIND_PACKAGE(GLM REQUIRED)
 FIND_PACKAGE(OpenMP REQUIRED)
+FIND_PACKAGE(Boost REQUIRED COMPONENTS filesystem program_options)
  
 SET(CUDA_VOXELIZER_EXECUTABLE cuda_voxelizer)
 
@@ -33,14 +34,24 @@ IF(NOT Trimesh2_LIBRARY)
 ENDIF()
 
 SET(CUDA_VOXELIZER_SRCS
-  ./src/main.cpp
-  ./src/util_cuda.cpp
-  ./src/util_io.cpp
+  ./src/libs/helper_cuda.h
+  ./src/libs/helper_string.h
+  ./src/cpu_voxelizer.h
   ./src/cpu_voxelizer.cpp
-  ./src/voxelize.cu
+  ./src/morton_LUTs.h
+  ./src/thrust_operations.cuh
   ./src/thrust_operations.cu
+  ./src/timer.h
+  ./src/util_cuda.h
+  ./src/util_cuda.cpp
+  ./src/util_io.h
+  ./src/util_io.cpp
+  ./src/util.h
+  ./src/main.cpp
+  ./src/voxelize.cuh
+  ./src/voxelize.cu
 )
 
 ADD_EXECUTABLE(${CUDA_VOXELIZER_EXECUTABLE} ${CUDA_VOXELIZER_SRCS})
 TARGET_INCLUDE_DIRECTORIES(	${CUDA_VOXELIZER_EXECUTABLE} PUBLIC ${Trimesh2_INCLUDE_DIR})
-TARGET_LINK_LIBRARIES ( ${CUDA_VOXELIZER_EXECUTABLE} PUBLIC ${Trimesh2_LIBRARY} PRIVATE glm)
+TARGET_LINK_LIBRARIES ( ${CUDA_VOXELIZER_EXECUTABLE} PUBLIC ${Trimesh2_LIBRARY} PRIVATE glm PUBLIC Boost::filesystem PUBLIC Boost::program_options)
