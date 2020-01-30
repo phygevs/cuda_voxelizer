@@ -28,6 +28,7 @@ Program options:
 ![viewvox example](https://raw.githubusercontent.com/Forceflow/cuda_voxelizer/master/img/viewvox.JPG)
 
 ## Building
+
 ### Dependencies
 The project has the following build dependencies:
  * [Cuda 8.0 Toolkit (or higher)](https://developer.nvidia.com/cuda-toolkit) for CUDA.
@@ -36,8 +37,24 @@ The project has the following build dependencies:
  * [GLM](http://glm.g-truc.net/0.9.8/index.html) for vector math. Any recent version will do.
  * [OpenMP](https://www.openmp.org/)
 
-### Windows
-A Visual Studio 2019 project solution is provided in the `msvc`folder. It is configured for CUDA 10.2, but you can edit the project file to make it work with lower CUDA versions. You can edit the `custom_includes.props` file to configure the library locations, and specify a place where the resulting binaries should be placed.
+### CMake
+
+1. Install dependency.
+2. Go to the root directory of the repository.
+3. `mkdir build`
+4. `cd build`
+5. `cmake -A x64 -DTrimesh2_INCLUDE_DIR="path_to_trimesh2_include" -DTrimesh2_LINK_DIR="path_to_trimesh2_library_dir" .. `. Recommended to install [vcpkg](https://github.com/microsoft/vcpkg) for Windows users. With vcpkg command is: `cmake -A x64 -DTrimesh2_INCLUDE_DIR="path_to_trimesh2_include" -DTrimesh2_LINK_DIR="path_to_trimesh2_library_dir" -DCMAKE_TOOLCHAIN_FILE="path_to_vcpkg\scripts\buildsystems\vcpkg.cmake" ..`
+
+You need to change `Compute-capability` for the CUDA. More about it [CUDA with CMake](https://devblogs.nvidia.com/building-cuda-applications-cmake/) and [compute-capability](https://jamesbowley.co.uk/accelerating-opencv-4-build-with-cuda-intel-mkl-tbb-and-python-bindings/#compute-capability).
+
+For example, on Windows:
+```
+cmake -A x64 -DCMAKE_TOOLCHAIN_FILE=".../vcpkg/scripts/buildsystems/vcpkg.cmake" -DTrimesh2_INCLUDE_DIR=".../trimesh2/include" -DTrimesh2_LINK_DIR="...\trimesh2\lib.Win64.vs142" ..
+```
+
+### Visual Studio 2019
+
+**It is not supported option in this fork. CMake is highly recommended** But you can use Visual Studio 2019 project solution is provided in the `msvc` folder. It is configured for CUDA 10.2, but you can edit the project file to make it work with lower CUDA versions. You can edit the `custom_includes.props` file to configure the library locations, and specify a place where the resulting binaries should be placed.
 
 ```
     <TRIMESH_DIR>C:\libs\trimesh2\</TRIMESH_DIR>
