@@ -290,13 +290,13 @@ int main(int argc, char* argv[]) {
 
 	fprintf(stdout, "\n## FILE OUTPUT \n");
 	if (outputformat == OutputFormat::output_morton) {
-		write_binary(vtable, vtable_size, input_file.string());
+		write_binary(vtable, vtable_size, input_file.stem().string());
 	}
 	else if (outputformat == OutputFormat::output_binvox) {
-		write_binvox(vtable, gridsize, input_file.string());
+		write_binvox(vtable, gridsize, input_file.stem().string());
 	}
 	else if (outputformat == OutputFormat::output_obj) {
-		write_obj(vtable, gridsize, input_file.string());
+		write_obj(vtable, gridsize, input_file.stem().string());
 	}
 
 	if (useThrustPath) {
