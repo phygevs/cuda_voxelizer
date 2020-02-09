@@ -6,23 +6,18 @@
 #include <string>
 #include <cstdio>
 #include <sstream>
-#include <map>
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 
-#include "prepare_model.h"
+#include "util.h"
+#include "cpu_computing.h"
+#include "gpu_computing.h"
 
 using namespace std;
 using namespace boost::program_options;
 using namespace boost::filesystem;
 
-constexpr char* version_number = "v0.4.4";
-
-const map<string, OutputFormat> formats{
-	{ "binvox", OutputFormat::output_binvox},
-	{ "morton", OutputFormat::output_morton},
-	{ "obj",  OutputFormat::output_obj}
-};
+constexpr char* version_number = "v0.4.5";
 
 constexpr char* input_arg_name{ "input" };
 constexpr char* input_arg_short_name{ "i" };
@@ -34,26 +29,30 @@ constexpr char* cpu_arg_name{ "cpu" };
 constexpr char* trust_lib_arg_name{ "cutrust" };
 constexpr char* trust_lib_arg_short_name{ "t" };
 
-istream& operator>>(istream& in, OutputFormat& format)
+void validate(boost::any& v, const std::vector<std::string>& values, outfmt::OutputFormat* target_type, int)
 {
-	string token;
+	using namespace boost::program_options;
 
-	in >> token;
+	// Make sure no previous assignment to 'a' was made.
+	validators::check_first_occurrence(v);
+	// Extract the first string from 'values'. If there is more than
+	// one string, it's an error, and exception will be thrown.
+	const std::string& s = validators::get_single_string(values);
 
 	try
 	{
-		format = formats.at(token);
+		v = boost::any(outfmt::formats.at(s));
 	}
-	catch (out_of_range & exc)
+	catch (const std::out_of_range&)
 	{
-		in.setstate(ios_base::failbit);
+		throw validation_error(validation_error::invalid_option_value);
 	}
-
-	return in;
 }
 
 auto parse_cli_args(int argc, char** argv)
 {
+	using namespace outfmt;
+
 	string model{ input_arg_name };
 	model += ',';
 	model += input_arg_short_name;
@@ -71,7 +70,7 @@ auto parse_cli_args(int argc, char** argv)
 	cuda_trust_arg += trust_lib_arg_short_name;
 
 	ostringstream description;
-	description << "## CUDA VOXELIZER\n" << "CUDA Voxelizer" << version_number << " by Jeroen Baert" << endl << "Original code: https://github.com/Forceflow/cuda_voxelizer - mail@jeroen-baert.be" << endl << "Fork: https://github.com/KernelA/cuda_voxelizer" << endl << "Example: cuda_voxelizer -f bunny.ply -s 512 -t" << endl << "Options";
+	description << "## CUDA VOXELIZER\n" << "CUDA Voxelizer" << version_number << " by Jeroen Baert" << endl << "Original code: https://github.com/Forceflow/cuda_voxelizer - mail@jeroen-baert.be" << endl << "Fork: https://github.com/KernelA/cuda_voxelizer" << endl << "Example: cuda_voxelizer -i bunny.ply -s 512 -t" << endl << "Options";
 
 	options_description desc{ description.str() };
 
@@ -88,7 +87,7 @@ auto parse_cli_args(int argc, char** argv)
 		("help,h", "Print help")
 		(model.c_str(), value<string>(), "<path to model file: .ply, .obj, .3ds> (required). If it is directory then recursive voxelize all models in current directory in all subdirectories.")
 		(voxel_resol.c_str(), value<int>()->default_value(128), "<voxelization grid size, power of 2: 8 -> 512, 1024, ... >")
-		(format_arg.c_str(), value<OutputFormat>()->default_value(OutputFormat::output_binvox), all_formats.str().c_str())
+		(format_arg.c_str(), value<OutputFormat>()->default_value(OutputFormat::output_binvox, "binvox"), all_formats.str().c_str())
 		(cuda_trust_arg.c_str(), bool_switch(), "Force using CUDA Thrust Library (possible speedup / throughput improvement)")
 		(cpu_arg_name, bool_switch(), "Force voxelization on the CPU instead of GPU.For when a CUDA device is not detected / compatible, or for very small models where GPU call overhead is not worth it")
 		;
@@ -164,17 +163,23 @@ int main(int argc, char* argv[])
 	bool forceCPU{ args[cpu_arg_name].as<bool>() };
 	bool useThrustPath{ args[trust_lib_arg_name].as<bool>() };
 	int gridsize{ args[voxel_resol_arg_name].as<int>() };
-	OutputFormat outputformat{ args[output_fromat_arg_name].as< OutputFormat >() };
+	outfmt::OutputFormat outputformat{ args[output_fromat_arg_name].as<outfmt::OutputFormat >() };
 
-	// SECTION: Try to figure out if we have a CUDA-enabled GPU
-	fprintf(stdout, "\n## CUDA INIT \n");
-	bool cuda_ok = initCuda();
+	bool cuda_ok{ false };
 
-	if (cuda_ok) {
-		fprintf(stdout, "[Info] CUDA GPU found\n");
-	}
-	else {
-		fprintf(stdout, "[Info] CUDA GPU not found\n");
+	if (!forceCPU)
+	{
+		// SECTION: Try to figure out if we have a CUDA-enabled GPU
+		fprintf(stdout, "\n## CUDA INIT \n");
+		cuda_ok = initCuda();
+
+		if (cuda_ok) {
+			fprintf(stdout, "[Info] CUDA GPU found\n");
+		}
+		else {
+			fprintf(stdout, "[Info] CUDA GPU not found\n");
+			forceCPU = true;
+		}
 	}
 
 	glm::uvec3 grid_sizes{ gridsize, gridsize, gridsize };
@@ -182,106 +187,13 @@ int main(int argc, char* argv[])
 	// Compute space needed to hold voxel table (1 voxel / bit)
 	size_t vtable_size = static_cast<size_t>(ceil(static_cast<size_t>(grid_sizes.x)* static_cast<size_t>(grid_sizes.y)* static_cast<size_t>(grid_sizes.z)) / 8.0f);
 
-	unsigned int* vtable{}; // Both voxelization paths (GPU and CPU) need this
-
-	if (cuda_ok && !forceCPU)
+	if (!forceCPU && cuda_ok)
 	{
-		string readable_size{ readableSize(vtable_size) };
-
-		if (!useThrustPath) {
-			fprintf(stdout, "[Voxel Grid] Allocating %s of CUDA-managed UNIFIED memory for Voxel Grid\n", readable_size.c_str());
-			checkCudaErrors(cudaMallocManaged((void**)&vtable, vtable_size));
-		}
-		else {
-			// ALLOCATE MEMORY ON HOST
-			fprintf(stdout, "[Voxel Grid] Allocating %s kB of page-locked HOST memory for Voxel Grid\n", readable_size.c_str());
-			checkCudaErrors(cudaHostAlloc((void**)&vtable, vtable_size, cudaHostAllocDefault));
-		}
+		gpu::compute_voxels(input, grid_sizes, vtable_size, outputformat, useThrustPath);
 	}
 	else
 	{
-		if (!forceCPU)
-		{
-			fprintf(stdout, "[Info] No suitable CUDA GPU was found: Falling back to CPU voxelization\n");
-			forceCPU = true;
-		}
-		else
-		{
-			fprintf(stdout, "[Info] Doing CPU voxelization (forced using command-line switch -cpu)\n");
-		}
-
-		vtable = (unsigned int*)calloc(1, vtable_size);
-	}
-
-	if (vtable == nullptr)
-	{
-		cerr << "[Error] Cannot allocate memory" << endl;
-		return 1;
-	}
-
-	auto input_type{ status(input).type() };
-
-	if (input_type == file_type::regular_file)
-	{
-		cout << "Voxelize model" << endl;
-
-		if (!voxelize_model(input, grid_sizes, vtable, vtable_size, useThrustPath, outputformat, forceCPU))
-		{
-			cerr << "Cannot voxelize model" << endl;
-		}
-	}
-	else if (input_type == file_type::directory_file)
-	{
-		cout << "Recursive voxelize all models" << endl;
-
-		auto iterator = recursive_directory_iterator(input);
-
-		const array<string, 4> valid_extensions{ ".ply", ".obj", ".3ds", ".off" };
-
-		for (const auto& entry : iterator)
-		{
-			if (entry.status().type() == file_type::regular_file)
-			{
-				path local_file{ entry.path() };
-
-				auto val = find(valid_extensions.cbegin(), valid_extensions.cend(), local_file.extension());
-
-				if (val != valid_extensions.cend())
-				{
-					cout << "\tFound " << local_file << endl;
-
-					if (!voxelize_model(local_file, grid_sizes, vtable, vtable_size, useThrustPath, outputformat, forceCPU))
-					{
-						cerr << "Cannot voxelize model" << endl;
-					}
-
-					if (forceCPU)
-					{
-						std::memset((void*)vtable, 0, vtable_size * sizeof(unsigned int));
-					}
-					else
-					{
-						checkCudaErrors(cudaMemset((void*)vtable, 0, vtable_size));
-					}
-				}
-			}
-		}
-	}
-
-	if (forceCPU)
-	{
-		free(vtable);
-	}
-	else
-	{
-		if (!useThrustPath)
-		{
-			cudaFree(vtable);
-		}
-		else
-		{
-			cudaFreeHost(vtable);
-		}
+		cpu::compute_voxels(input, grid_sizes, vtable_size, outputformat);
 	}
 
 	return 0;

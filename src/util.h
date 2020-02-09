@@ -1,17 +1,32 @@
 #pragma once
 
 #include <stdint.h>
+#include <string>
+#include <fstream>
+#include <map>
+#include <boost/program_options.hpp>
 
 #include "TriMesh.h"
 #include "cuda.h"
 #include "cuda_runtime.h"
-#include <string>
-#include <fstream>
 
 #define GLM_FORCE_CUDA
 #define GLM_FORCE_PURE
 #include <glm/glm.hpp>
 
+namespace outfmt
+{
+	// Output formats
+	enum class OutputFormat { output_binvox = 0, output_morton = 1, output_obj = 2 };
+
+	const std::map<std::string, OutputFormat> formats{
+		{ "binvox", OutputFormat::output_binvox},
+		{ "morton", OutputFormat::output_morton},
+		{ "obj",  OutputFormat::output_obj}
+	};
+
+	void validate(boost::any& v, const std::vector<std::string>& values, outfmt::OutputFormat* target_type, int);
+}
 
 // Converting builtin TriMesh vectors to GLM vectors
 // We do this as soon as possible, because GLM is great and the builtin Vector math of TriMesh is okay, but not CUDA-compatible
@@ -28,8 +43,8 @@ inline trimeshtype glm_to_trimesh(glm::vec3 a) {
 }
 
 // Check if a voxel in the voxel table is set
-__device__ __host__ inline bool checkVoxel(size_t x, size_t y, size_t z, size_t gridsize, const unsigned int* vtable){
-	size_t location = x + (y*gridsize) + (z*gridsize*gridsize);
+__device__ __host__ inline bool checkVoxel(size_t x, size_t y, size_t z, size_t gridsize, const unsigned int* vtable) {
+	size_t location = x + (y * gridsize) + (z * gridsize * gridsize);
 	size_t int_location = location / size_t(32);
 	/*size_t max_index = (gridsize*gridsize*gridsize) / __int64(32);
 	if (int_location >= max_index){
@@ -37,7 +52,7 @@ __device__ __host__ inline bool checkVoxel(size_t x, size_t y, size_t z, size_t 
 	fprintf(stdout, "X %llu Y %llu Z %llu \n", int_location);
 	}*/
 	unsigned int bit_pos = size_t(31) - (location % size_t(32)); // we count bit positions RtL, but array indices LtR
-	if ((vtable[int_location]) & (1 << bit_pos)){
+	if ((vtable[int_location]) & (1 << bit_pos)) {
 		return true;
 	}
 	return false;
@@ -89,9 +104,10 @@ inline AABox<T> createMeshBBCube(AABox<T> box) {
 	glm::vec3 lengths = box.max - box.min; // check length of given bbox in every direction
 	float max_length = glm::max(lengths.x, glm::max(lengths.y, lengths.z)); // find max length
 	for (unsigned int i = 0; i < 3; i++) { // for every direction (X,Y,Z)
-		if (max_length == lengths[i]){
+		if (max_length == lengths[i]) {
 			continue;
-		} else {
+		}
+		else {
 			float delta = max_length - lengths[i]; // compute difference between largest length and current (X,Y or Z) length
 			answer.min[i] = box.min[i] - (delta / 2.0f); // pad with half the difference before current min
 			answer.max[i] = box.max[i] + (delta / 2.0f); // pad with half the difference behind current max
@@ -109,8 +125,8 @@ inline AABox<T> createMeshBBCube(AABox<T> box) {
 }
 
 // Helper method to print bits
-void inline printBits(size_t const size, void const * const ptr) {
-	unsigned char *b = (unsigned char*)ptr;
+void inline printBits(size_t const size, void const* const ptr) {
+	unsigned char* b = (unsigned char*)ptr;
 	unsigned char byte;
 	int i, j;
 	for (i = static_cast<int>(size) - 1; i >= 0; i--) {
