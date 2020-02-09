@@ -50,6 +50,13 @@ SET(CUDA_VOXELIZER_SRCS
   ./src/main.cpp
   ./src/voxelize.cuh
   ./src/voxelize.cu
+  ./src/prepare_model.h
+  ./src/prepare_model.cpp
+  ./src/cpu_voxelization.h
+  ./src/cpu_voxelization.cpp
+  ./src/gpu_voxelization.h
+  ./src/gpu_voxelization.cpp
+  
 )
 
 ADD_EXECUTABLE(${CUDA_VOXELIZER_EXECUTABLE} ${CUDA_VOXELIZER_SRCS})
