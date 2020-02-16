@@ -1,7 +1,6 @@
 #include "cpu_voxelizer.h"
 
 namespace cpu_voxelizer {
-
 	// Set specific bit in voxel table
 	void setBit(unsigned int* voxel_table, size_t index) {
 		size_t int_location = index / size_t(32);
@@ -33,7 +32,6 @@ namespace cpu_voxelizer {
 		//glm::vec3 delta_p(info.unit.x, info.unit.y, info.unit.z);
 		//glm::vec3 c(0.0f, 0.0f, 0.0f); // critical point
 		//glm::vec3 grid_max(info.gridsize.x - 1, info.gridsize.y - 1, info.gridsize.z - 1); // grid max (grid runs from 0 to gridsize-1)
-
 
 		// PREPASS
 		// Move all vertices to origin (can be done in parallel)
@@ -151,7 +149,7 @@ namespace cpu_voxelizer {
 						if ((glm::dot(n_yz_e1, p_yz) + d_yz_e1) < 0.0f) { continue; }
 						if ((glm::dot(n_yz_e2, p_yz) + d_yz_e2) < 0.0f) { continue; }
 
-						// XZ	
+						// XZ
 						glm::vec2 p_zx(p.z, p.x);
 						if ((glm::dot(n_zx_e0, p_zx) + d_xz_e0) < 0.0f) { continue; }
 						if ((glm::dot(n_zx_e1, p_zx) + d_xz_e1) < 0.0f) { continue; }

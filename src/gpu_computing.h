@@ -2,6 +2,7 @@
 
 #include <boost/filesystem.hpp>
 #include <array>
+#include "loggers.h"
 
 // GLM for maths
 #define GLM_FORCE_PURE
@@ -26,7 +27,7 @@ namespace gpu
 	// METHOD 1: Helper function to transfer triangles to automatically managed CUDA memory ( > CUDA 7.x)
 	float* meshToGPU_managed(const trimesh::TriMesh* mesh);
 
-	void compute_voxels(const boost::filesystem::path& input, const glm::vec3& grid_sizes, std::size_t vtable_size, outfmt::OutputFormat output_format, bool use_trust);
+	void compute_voxels(const boost::filesystem::path& input, const glm::uvec3& grid_sizes, std::size_t vtable_size, outfmt::OutputFormat output_format, bool use_trust);
 
-	bool prepare_model_and_voxelize(const boost::filesystem::path& path_to_model, unsigned int* vtable, std::size_t vtable_size, const glm::vec3& grid_sizes, const outfmt::OutputFormat output_format, bool use_trust);
+	bool prepare_model_and_voxelize(const boost::filesystem::path& path_to_model, unsigned int* vtable, std::size_t vtable_size, const glm::uvec3& grid_sizes, const outfmt::OutputFormat output_format, bool use_trust);
 }

@@ -4,10 +4,10 @@
 
 // Standard libs
 #include <string>
-#include <cstdio>
 #include <sstream>
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
+#include "loggers.h"
 
 #include "util.h"
 #include "cpu_computing.h"
@@ -17,7 +17,7 @@ using namespace std;
 using namespace boost::program_options;
 using namespace boost::filesystem;
 
-constexpr char* version_number = "v0.4.5";
+constexpr char* version_number = "v0.4.6";
 
 constexpr char* input_arg_name{ "input" };
 constexpr char* input_arg_short_name{ "i" };
@@ -28,7 +28,10 @@ constexpr char* output_fromat_arg_short_name{ "o" };
 constexpr char* cpu_arg_name{ "cpu" };
 constexpr char* trust_lib_arg_name{ "cutrust" };
 constexpr char* trust_lib_arg_short_name{ "t" };
+constexpr char* log_sett_arg_name{ "logconf" };
+constexpr char* log_sett_short_arg_name{ "c" };
 
+// Validate output_fromat_arg_name
 void validate(boost::any& v, const std::vector<std::string>& values, outfmt::OutputFormat* target_type, int)
 {
 	using namespace boost::program_options;
@@ -47,6 +50,24 @@ void validate(boost::any& v, const std::vector<std::string>& values, outfmt::Out
 	{
 		throw validation_error(validation_error::invalid_option_value);
 	}
+}
+
+void init_logg_settings_from_file(const path& path_to_config)
+{
+	std::ifstream settings(path_to_config.string());
+
+	if (!settings.is_open())
+	{
+		cerr << "Could not open " << path_to_config << std::endl;
+	}
+
+	// Read the settings and initialize logging library
+	boost::log::init_from_stream(settings);
+
+	settings.close();
+
+	// Add some attributes
+	boost::log::core::get()->add_global_attribute("TimeStamp", boost::log::attributes::local_clock());
 }
 
 auto parse_cli_args(int argc, char** argv)
@@ -69,6 +90,10 @@ auto parse_cli_args(int argc, char** argv)
 	cuda_trust_arg += ',';
 	cuda_trust_arg += trust_lib_arg_short_name;
 
+	string log_sett_arg{ log_sett_arg_name };
+	log_sett_arg += ',';
+	log_sett_arg += log_sett_short_arg_name;
+
 	ostringstream description;
 	description << "## CUDA VOXELIZER\n" << "CUDA Voxelizer" << version_number << " by Jeroen Baert" << endl << "Original code: https://github.com/Forceflow/cuda_voxelizer - mail@jeroen-baert.be" << endl << "Fork: https://github.com/KernelA/cuda_voxelizer" << endl << "Example: cuda_voxelizer -i bunny.ply -s 512 -t" << endl << "Options";
 
@@ -90,6 +115,7 @@ auto parse_cli_args(int argc, char** argv)
 		(format_arg.c_str(), value<OutputFormat>()->default_value(OutputFormat::output_binvox, "binvox"), all_formats.str().c_str())
 		(cuda_trust_arg.c_str(), bool_switch(), "Force using CUDA Thrust Library (possible speedup / throughput improvement)")
 		(cpu_arg_name, bool_switch(), "Force voxelization on the CPU instead of GPU.For when a CUDA device is not detected / compatible, or for very small models where GPU call overhead is not worth it")
+		(log_sett_arg.c_str(), value<string>()->default_value("logsettings.ini"), "Path to file with log config. See https://www.boost.org/doc/libs/1_72_0/libs/log/doc/html/log/detailed/utilities.html#log.detailed.utilities.setup.settings_file")
 		;
 
 	variables_map vm;
@@ -101,12 +127,6 @@ auto parse_cli_args(int argc, char** argv)
 
 bool validate_args(const variables_map& args, const options_description& desc)
 {
-	if (args.count(input_arg_name) != 1)
-	{
-		cerr << input_arg_name << " required argument" << endl;
-		return false;
-	}
-
 	if (args.count(input_arg_name))
 	{
 		path input_file{ args[input_arg_name].as<string>() };
@@ -116,6 +136,17 @@ bool validate_args(const variables_map& args, const options_description& desc)
 		if (input_type != file_type::regular_file && input_type != file_type::directory_file)
 		{
 			cerr << input_file << " is not file or directory. It may be no exist." << endl;
+			return false;
+		}
+	}
+
+	if (args.count(log_sett_arg_name))
+	{
+		path log_sett_file{ args[log_sett_arg_name].as<string>() };
+
+		if (status(log_sett_file).type() != file_type::regular_file)
+		{
+			cerr << log_sett_file << " is not file. It may be no exist." << endl;
 			return false;
 		}
 	}
@@ -159,6 +190,8 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
+	init_logg_settings_from_file(path{ args[log_sett_arg_name].as<string>() });
+
 	path input{ args[input_arg_name].as<string>() };
 	bool forceCPU{ args[cpu_arg_name].as<bool>() };
 	bool useThrustPath{ args[trust_lib_arg_name].as<bool>() };
@@ -170,14 +203,15 @@ int main(int argc, char* argv[])
 	if (!forceCPU)
 	{
 		// SECTION: Try to figure out if we have a CUDA-enabled GPU
-		fprintf(stdout, "\n## CUDA INIT \n");
+		BOOST_LOG_TRIVIAL(info) << "## CUDA INIT" << endl;
+
 		cuda_ok = initCuda();
 
 		if (cuda_ok) {
-			fprintf(stdout, "[Info] CUDA GPU found\n");
+			BOOST_LOG_TRIVIAL(info) << "CUDA GPU found" << endl;
 		}
 		else {
-			fprintf(stdout, "[Info] CUDA GPU not found\n");
+			BOOST_LOG_TRIVIAL(info) << "CUDA GPU not found" << endl;
 			forceCPU = true;
 		}
 	}

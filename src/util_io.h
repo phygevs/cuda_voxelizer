@@ -1,9 +1,10 @@
 #pragma once
 
 #include <string>
-#include <iostream>
+#include <iosfwd>
 #include <fstream>
 #include <array>
+#include "loggers.h"
 
 const std::array<std::string, 4> valid_extensions{ ".ply", ".obj", ".3ds", ".off" };
 

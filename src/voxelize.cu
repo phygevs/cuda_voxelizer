@@ -211,7 +211,7 @@ __global__ void voxelize_triangle(voxinfo info, float* triangle_data, unsigned i
 }
 
 void compute_voxels(const voxinfo& v, float* triangle_data, unsigned int* vtable, bool useThrustPath, bool morton_code) {
-	float   elapsedTime;
+	float elapsedTime;
 
 	// These are only used when we're not using UNIFIED memory
 	unsigned int* dev_vtable; // DEVICE pointer to voxel_data

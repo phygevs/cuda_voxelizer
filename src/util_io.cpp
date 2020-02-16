@@ -16,7 +16,7 @@ void read_binary(void* data, const size_t length, const std::string base_filenam
 	std::ifstream input(base_filename.c_str(), ios_base::in | ios_base::binary);
 	assert(input);
 #ifndef SILENT
-	fprintf(stdout, "[I/O] Reading %llu kb of binary data from file %s \n", size_t(length / 1024.0f), base_filename.c_str()); fflush(stdout);
+	BOOST_LOG_TRIVIAL(debug) << "[I/O] Reading " << static_cast<size_t>(length / 1024.0f) << " kb of binary data from file '" << base_filename << '\'' << std::endl;
 #endif
 	input.seekg(0, input.beg);
 	input.read((char*)data, 8);
@@ -27,7 +27,7 @@ void read_binary(void* data, const size_t length, const std::string base_filenam
 void write_obj(const unsigned int* vtable, const size_t gridsize, const std::string base_filename) {
 	string filename_output = base_filename + string("_") + to_string(gridsize) + string(".obj");
 #ifndef SILENT
-	fprintf(stdout, "[I/O] Writing data in obj format to %s \n", filename_output.c_str());
+	BOOST_LOG_TRIVIAL(debug) << "[I/O] Writing data in obj format to '" << filename_output << '\'' << endl;
 #endif
 	ofstream output(filename_output.c_str(), ios::out);
 	size_t voxels_written = 0;
@@ -63,16 +63,16 @@ void save_voxel(const string& path, const unsigned int* vtable, const size_t vta
 		write_obj(vtable, grid_size, path);
 		break;
 	default:
-		cerr << "Unknown format. Cannot save result" << endl;
+		BOOST_LOG_TRIVIAL(error) << "Unknown format. Cannot save result" << endl;
 	}
 }
 
 void write_binary(const void* data, size_t bytes, const std::string base_filename) {
 	string filename_output = base_filename + string(".bin");
 #ifndef SILENT
-	fprintf(stdout, "[I/O] Writing data in binary format to %s (%s) \n", filename_output.c_str(), readableSize(bytes).c_str());
+	BOOST_LOG_TRIVIAL(debug) << "[I/O] Writing data in binary format to '" << filename_output << '\'' << '(' << readableSize(bytes) << ')' << endl;
 #endif
-	ofstream output(filename_output.c_str(), ios_base::out | ios_base::binary);
+	ofstream output(filename_output, ios_base::out | ios_base::binary);
 	output.write((char*)data, bytes);
 	output.close();
 }
@@ -81,10 +81,15 @@ void write_binvox(const unsigned int* vtable, const size_t gridsize, const std::
 	// Open file
 	string filename_output = base_filename + string("_") + to_string(gridsize) + string(".binvox");
 #ifndef SILENT
-	fprintf(stdout, "[I/O] Writing data in binvox format to %s \n", filename_output.c_str());
+	BOOST_LOG_TRIVIAL(debug) << "[I/O] Writing data in binvox format to '" << filename_output << '\'' << endl;
 #endif
-	ofstream output(filename_output.c_str(), ios::out | ios::binary);
-	assert(output);
+	ofstream output(filename_output, ios::out | ios::binary);
+
+	if (!output.is_open())
+	{
+		BOOST_LOG_TRIVIAL(debug) << "Cannot open file\n";
+		return;
+	}
 
 	// Write ASCII header
 	output << "#binvox 1" << endl;

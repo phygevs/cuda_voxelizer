@@ -2,6 +2,7 @@
 
 #include <array>
 #include <boost/filesystem.hpp>
+#include "loggers.h"
 
 // GLM for maths
 #define GLM_FORCE_PURE
@@ -19,7 +20,7 @@
 
 namespace cpu
 {
-	void compute_voxels(const boost::filesystem::path& input, const glm::vec3& grid_sizes, std::size_t vtable_size, outfmt::OutputFormat output_format);
+	void compute_voxels(const boost::filesystem::path& input, const glm::uvec3& grid_sizes, std::size_t vtable_size, outfmt::OutputFormat output_format);
 
-	bool prepare_model_and_voxelize(const boost::filesystem::path& path_to_model, unsigned int* vtable, std::size_t vtable_size, const glm::vec3& grid_sizes, const outfmt::OutputFormat output_format);
+	bool prepare_model_and_voxelize(const boost::filesystem::path& path_to_model, unsigned int* vtable, std::size_t vtable_size, const glm::uvec3& grid_sizes, const outfmt::OutputFormat output_format);
 }
