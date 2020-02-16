@@ -3,14 +3,6 @@
 
 using namespace std;
 
-size_t get_file_length(const std::string base_filename) {
-	// open file at the end
-	std::ifstream input(base_filename.c_str(), ios_base::ate | ios_base::binary);
-	assert(input);
-	size_t length = input.tellg();
-	input.close();
-	return length; // get file length
-}
 void read_binary(void* data, const size_t length, const std::string base_filename) {
 	// open file
 	std::ifstream input(base_filename.c_str(), ios_base::in | ios_base::binary);
