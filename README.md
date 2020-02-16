@@ -44,6 +44,7 @@ The project has the following build dependencies:
 3. `mkdir build`
 4. `cd build`
 5. `cmake -A x64 -DTrimesh2_INCLUDE_DIR="path_to_trimesh2_include" -DTrimesh2_LINK_DIR="path_to_trimesh2_library_dir" .. `. Recommended to install [vcpkg](https://github.com/microsoft/vcpkg) for Windows users. With vcpkg command is: `cmake -A x64 -DTrimesh2_INCLUDE_DIR="path_to_trimesh2_include" -DTrimesh2_LINK_DIR="path_to_trimesh2_library_dir" -DCMAKE_TOOLCHAIN_FILE="path_to_vcpkg\scripts\buildsystems\vcpkg.cmake" ..`
+6. **Copy `src/logsettings.ini` to destination of executable file.** [See documentation for settings](https://www.boost.org/doc/libs/1_72_0/libs/log/doc/html/log/detailed/utilities.html#log.detailed.utilities.setup.settings_file)
 
 You need to change `Compute-capability` for the CUDA. Set `CUDA_ARCH` variable for your GPU. More about it [CUDA with CMake](https://devblogs.nvidia.com/building-cuda-applications-cmake/) and [compute-capability](https://jamesbowley.co.uk/accelerating-opencv-4-build-with-cuda-intel-mkl-tbb-and-python-bindings/#compute-capability). 
 
