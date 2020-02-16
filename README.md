@@ -45,11 +45,11 @@ The project has the following build dependencies:
 4. `cd build`
 5. `cmake -A x64 -DTrimesh2_INCLUDE_DIR="path_to_trimesh2_include" -DTrimesh2_LINK_DIR="path_to_trimesh2_library_dir" .. `. Recommended to install [vcpkg](https://github.com/microsoft/vcpkg) for Windows users. With vcpkg command is: `cmake -A x64 -DTrimesh2_INCLUDE_DIR="path_to_trimesh2_include" -DTrimesh2_LINK_DIR="path_to_trimesh2_library_dir" -DCMAKE_TOOLCHAIN_FILE="path_to_vcpkg\scripts\buildsystems\vcpkg.cmake" ..`
 
-You need to change `Compute-capability` for the CUDA. More about it [CUDA with CMake](https://devblogs.nvidia.com/building-cuda-applications-cmake/) and [compute-capability](https://jamesbowley.co.uk/accelerating-opencv-4-build-with-cuda-intel-mkl-tbb-and-python-bindings/#compute-capability).
+You need to change `Compute-capability` for the CUDA. Set `CUDA_ARCH` variable for your GPU. More about it [CUDA with CMake](https://devblogs.nvidia.com/building-cuda-applications-cmake/) and [compute-capability](https://jamesbowley.co.uk/accelerating-opencv-4-build-with-cuda-intel-mkl-tbb-and-python-bindings/#compute-capability). 
 
 For example, on Windows:
 ```
-cmake -A x64 -DCMAKE_TOOLCHAIN_FILE=".../vcpkg/scripts/buildsystems/vcpkg.cmake" -DTrimesh2_INCLUDE_DIR=".../trimesh2/include" -DTrimesh2_LINK_DIR="...\trimesh2\lib.Win64.vs142" ..
+cmake -A x64 -DCMAKE_TOOLCHAIN_FILE=".../vcpkg/scripts/buildsystems/vcpkg.cmake" -DTrimesh2_INCLUDE_DIR=".../trimesh2/include" -DTrimesh2_LINK_DIR="...\trimesh2\lib.Win64.vs142" -DCUDA_ARCH="61" ..
 ```
 
 ### Visual Studio 2019
