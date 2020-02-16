@@ -1,3 +1,5 @@
+#pragma once
+
 #include <stdint.h>
 
 // LUT tables to copy to GPU memory for quick morton decode / encode

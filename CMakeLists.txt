@@ -47,9 +47,16 @@ SET(CUDA_VOXELIZER_SRCS
   ./src/util_io.h
   ./src/util_io.cpp
   ./src/util.h
+  ./src/util.cpp
   ./src/main.cpp
   ./src/voxelize.cuh
   ./src/voxelize.cu
+  ./src/prepare_model.h
+  ./src/prepare_model.cpp
+  ./src/cpu_computing.h
+  ./src/cpu_computing.cpp
+  ./src/gpu_computing.h
+  ./src/gpu_computing.cpp
 )
 
 ADD_EXECUTABLE(${CUDA_VOXELIZER_EXECUTABLE} ${CUDA_VOXELIZER_SRCS})
