@@ -8,8 +8,8 @@
 #define GLM_FORCE_PURE
 #include <glm/glm.hpp>
 
-#include <iostream>
 #include "util.h"
 #include "util_cuda.h"
 
 #include "morton_LUTs.h"
+#include "loggers.h"

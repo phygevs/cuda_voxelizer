@@ -7,8 +7,8 @@
 #include <sstream>
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
-#include "loggers.h"
 
+#include "loggers.h"
 #include "util.h"
 #include "cpu_computing.h"
 #include "gpu_computing.h"
@@ -16,6 +16,7 @@
 using namespace std;
 using namespace boost::program_options;
 using namespace boost::filesystem;
+using namespace logging;
 
 constexpr char* version_number = "v0.4.6";
 
@@ -192,6 +193,8 @@ int main(int argc, char* argv[])
 
 	init_logg_settings_from_file(path{ args[log_sett_arg_name].as<string>() });
 
+	logging::logger_t& logger_main = logging::logger_main::get();
+
 	path input{ args[input_arg_name].as<string>() };
 	bool forceCPU{ args[cpu_arg_name].as<bool>() };
 	bool useThrustPath{ args[trust_lib_arg_name].as<bool>() };
@@ -203,15 +206,15 @@ int main(int argc, char* argv[])
 	if (!forceCPU)
 	{
 		// SECTION: Try to figure out if we have a CUDA-enabled GPU
-		BOOST_LOG_TRIVIAL(info) << "## CUDA INIT" << endl;
+		BOOST_LOG_SEV(logger_main, severity_t::info) << "## CUDA INIT" << endl;
 
 		cuda_ok = initCuda();
 
 		if (cuda_ok) {
-			BOOST_LOG_TRIVIAL(info) << "CUDA GPU found" << endl;
+			BOOST_LOG_SEV(logger_main, severity_t::info) << "CUDA GPU found" << endl;
 		}
 		else {
-			BOOST_LOG_TRIVIAL(info) << "CUDA GPU not found" << endl;
+			BOOST_LOG_SEV(logger_main, severity_t::info) << "CUDA GPU not found" << endl;
 			forceCPU = true;
 		}
 	}
@@ -229,6 +232,8 @@ int main(int argc, char* argv[])
 	{
 		cpu::compute_voxels(input, grid_sizes, vtable_size, outputformat);
 	}
+
+	boost::log::core::get()->remove_all_sinks();
 
 	return 0;
 }

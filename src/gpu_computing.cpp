@@ -8,7 +8,9 @@ void gpu::compute_voxels(const boost::filesystem::path& input, const glm::uvec3&
 
 	string readable_size{ readableSize(vtable_size) };
 
-	auto cuda_deleter = [use_trust](unsigned int* ptr) -> void
+	logging::logger_t& logger_main = logging::logger_main::get();
+
+	auto cuda_deleter = [use_trust, &logger_main](unsigned int* ptr) -> void
 	{
 		if (use_trust)
 		{
@@ -20,7 +22,7 @@ void gpu::compute_voxels(const boost::filesystem::path& input, const glm::uvec3&
 		}
 	};
 
-	auto cuda_malloc = [use_trust, &readable_size](size_t size) -> unsigned int*
+	auto cuda_malloc = [use_trust, &readable_size, &logger_main](size_t size) -> unsigned int*
 	{
 		unsigned int* ptr{};
 
@@ -29,20 +31,20 @@ void gpu::compute_voxels(const boost::filesystem::path& input, const glm::uvec3&
 		if (use_trust)
 		{
 			// ALLOCATE MEMORY ON HOST
-			BOOST_LOG_TRIVIAL(debug) << "[Voxel Grid] Allocating " << readable_size << " kB of page-locked HOST memory for Voxel Grid" << endl;
+			BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "[Voxel Grid] Allocating " << readable_size << " kB of page-locked HOST memory for Voxel Grid" << endl;
 
 			error = cudaHostAlloc((void**)&ptr, size, cudaHostAllocDefault);
 		}
 		else
 		{
-			BOOST_LOG_TRIVIAL(debug) << "[Voxel Grid] Allocating " << readable_size << " of CUDA-managed UNIFIED memory for Voxel Grid" << endl;
+			BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "[Voxel Grid] Allocating " << readable_size << " of CUDA-managed UNIFIED memory for Voxel Grid" << endl;
 
 			error = cudaMallocManaged((void**)&ptr, size);
 		}
 
 		if (error != cudaSuccess)
 		{
-			BOOST_LOG_TRIVIAL(error) << cudaGetErrorString(error) << endl;
+			BOOST_LOG_SEV(logger_main, logging::severity_t::error) << cudaGetErrorString(error) << endl;
 		}
 
 		return ptr;
@@ -52,7 +54,7 @@ void gpu::compute_voxels(const boost::filesystem::path& input, const glm::uvec3&
 
 	if (vtable.get() == nullptr)
 	{
-		BOOST_LOG_TRIVIAL(error) << "Cannot allocate memory on GPU" << endl;
+		BOOST_LOG_SEV(logger_main, logging::severity_t::error) << "Cannot allocate memory on GPU" << endl;
 		return;
 	}
 
@@ -60,16 +62,16 @@ void gpu::compute_voxels(const boost::filesystem::path& input, const glm::uvec3&
 
 	if (input_type == file_type::regular_file)
 	{
-		BOOST_LOG_TRIVIAL(info) << "Voxelize model" << endl;
+		BOOST_LOG_SEV(logger_main, logging::severity_t::info) << "Voxelize model" << endl;
 
 		if (!prepare_model_and_voxelize(input, vtable.get(), vtable_size, grid_sizes, output_format, use_trust))
 		{
-			BOOST_LOG_TRIVIAL(error) << "Cannot voxelize model " << input << endl;
+			BOOST_LOG_SEV(logger_main, logging::severity_t::error) << "Cannot voxelize model " << input << endl;
 		}
 	}
 	else if (input_type == file_type::directory_file)
 	{
-		BOOST_LOG_TRIVIAL(info) << "Recursive voxelize all models" << endl;
+		BOOST_LOG_SEV(logger_main, logging::severity_t::info) << "Recursive voxelize all models" << endl;
 
 		auto iterator = recursive_directory_iterator(input);
 
@@ -83,11 +85,11 @@ void gpu::compute_voxels(const boost::filesystem::path& input, const glm::uvec3&
 
 				if (val != valid_extensions.cend())
 				{
-					BOOST_LOG_TRIVIAL(info) << "Found " << local_file << endl;
+					BOOST_LOG_SEV(logger_main, logging::severity_t::info) << "Found " << local_file << endl;
 
 					if (!prepare_model_and_voxelize(local_file, vtable.get(), vtable_size, grid_sizes, output_format, use_trust))
 					{
-						BOOST_LOG_TRIVIAL(error) << "Cannot voxelize model" << endl;
+						BOOST_LOG_SEV(logger_main, logging::severity_t::error) << "Cannot voxelize model" << endl;
 					}
 
 					checkCudaErrors(cudaMemset((void*)vtable.get(), 0, vtable_size));
@@ -101,6 +103,8 @@ bool gpu::prepare_model_and_voxelize(const boost::filesystem::path& path_to_mode
 {
 	assert(grid_sizes.x == grid_sizes.y == grid_sizes.z);
 
+	logging::logger_t& logger_main = logging::logger_main::get();
+
 	Timer t;
 
 	t.start();
@@ -109,14 +113,14 @@ bool gpu::prepare_model_and_voxelize(const boost::filesystem::path& path_to_mode
 
 	if (themesh.get() == nullptr)
 	{
-		BOOST_LOG_TRIVIAL(error) << "Cannot load mesh" << endl;
+		BOOST_LOG_SEV(logger_main, logging::severity_t::error) << "Cannot load mesh" << endl;
 		return false;
 	}
 
 	voxinfo voxelization_info{ util::voxelization_setup(themesh.get(), grid_sizes) };
 
 	// GPU voxelization
-	BOOST_LOG_TRIVIAL(debug) << "## TRIANGLES TO GPU TRANSFER" << endl;
+	BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "## TRIANGLES TO GPU TRANSFER" << endl;
 
 	float* device_triangles{};
 
@@ -130,7 +134,7 @@ bool gpu::prepare_model_and_voxelize(const boost::filesystem::path& path_to_mode
 		device_triangles = meshToGPU_managed(themesh.get());
 	}
 
-	BOOST_LOG_TRIVIAL(debug) << "## GPU VOXELISATION" << endl;
+	BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "## GPU VOXELISATION" << endl;
 
 	compute_voxels(voxelization_info, device_triangles, vtable, use_trust, (output_format == outfmt::OutputFormat::output_morton));
 
@@ -143,29 +147,31 @@ bool gpu::prepare_model_and_voxelize(const boost::filesystem::path& path_to_mode
 		checkCudaErrors(cudaFree(device_triangles));
 	}
 
-	BOOST_LOG_TRIVIAL(debug) << "## FILE OUTPUT" << endl;
+	BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "## FILE OUTPUT" << endl;
 
 	string output_name = (path_to_model.parent_path() / path_to_model.stem()).string();
 
 	save_voxel(output_name, vtable, vtable_size, grid_sizes.x, output_format);
 
 	t.stop();
-	BOOST_LOG_TRIVIAL(debug) << "## STATS" << endl;
-	BOOST_LOG_TRIVIAL(debug) << "[Perf] Total runtime: " << t.elapsed_time_milliseconds << " ms" << endl;
+	BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "## STATS" << endl;
+	BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "[Perf] Total runtime: " << t.elapsed_time_milliseconds << " ms" << endl;
 
 	return true;
 }
 
 float* gpu::meshToGPU_managed(const trimesh::TriMesh* mesh)
 {
+	logging::logger_t& logger_main = logging::logger_main::get();
+
 	Timer t;
 	t.start();
 	size_t n_floats = sizeof(float) * 9 * (mesh->faces.size());
 	float* device_triangles{};
 
-	BOOST_LOG_TRIVIAL(debug) << "[Mesh] Allocating " << readableSize(n_floats) << " of CUDA-managed UNIFIED memory for triangle data" << endl;
+	BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "[Mesh] Allocating " << readableSize(n_floats) << " of CUDA-managed UNIFIED memory for triangle data" << endl;
 	checkCudaErrors(cudaMallocManaged((void**)&device_triangles, n_floats)); // managed memory
-	BOOST_LOG_TRIVIAL(debug) << "[Mesh] Copy " << mesh->faces.size() << " triangles to CUDA-managed UNIFIED memory" << endl;
+	BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "[Mesh] Copy " << mesh->faces.size() << " triangles to CUDA-managed UNIFIED memory" << endl;
 	for (size_t i = 0; i < mesh->faces.size(); i++) {
 		glm::vec3 v0 = trimesh_to_glm<trimesh::point>(mesh->vertices[mesh->faces[i][0]]);
 		glm::vec3 v1 = trimesh_to_glm<trimesh::point>(mesh->vertices[mesh->faces[i][1]]);
@@ -176,7 +182,7 @@ float* gpu::meshToGPU_managed(const trimesh::TriMesh* mesh)
 		memcpy((device_triangles)+j + 6, glm::value_ptr(v2), sizeof(glm::vec3));
 	}
 	t.stop();
-	BOOST_LOG_TRIVIAL(debug) << "[Perf] Mesh transfer time to GPU: " << t.elapsed_time_milliseconds << " ms" << endl;
+	BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "[Perf] Mesh transfer time to GPU: " << t.elapsed_time_milliseconds << " ms" << endl;
 
 	//for (size_t i = 0; i < mesh->faces.size(); i++) {
 	//	size_t t = i * 9;

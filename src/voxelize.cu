@@ -217,6 +217,8 @@ void compute_voxels(const voxinfo& v, float* triangle_data, unsigned int* vtable
 	unsigned int* dev_vtable; // DEVICE pointer to voxel_data
 	size_t vtable_size; // vtable size
 
+	logging::logger_t& logger_main = logging::logger_main::get();
+
 	// Create timers, set start time
 	cudaEvent_t start_vox, stop_vox;
 	checkCudaErrors(cudaEventCreate(&start_vox));
@@ -239,7 +241,7 @@ void compute_voxels(const voxinfo& v, float* triangle_data, unsigned int* vtable
 
 	if (useThrustPath) { // We're not using UNIFIED memory
 		vtable_size = ((size_t)v.gridsize.x * v.gridsize.y * v.gridsize.z) / (size_t)8.0;
-		fprintf(stdout, "[Voxel Grid] Allocating %llu kB of DEVICE memory for Voxel Grid\n", size_t(vtable_size / 1024.0f));
+		BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "[Voxel Grid] Allocating " << size_t(vtable_size / 1024.0f) << " kB of DEVICE memory for Voxel Grid" << std::endl;
 		checkCudaErrors(cudaMalloc(&dev_vtable, vtable_size));
 		checkCudaErrors(cudaMemset(dev_vtable, 0, vtable_size));
 		// Start voxelization
@@ -255,13 +257,13 @@ void compute_voxels(const voxinfo& v, float* triangle_data, unsigned int* vtable
 	checkCudaErrors(cudaEventRecord(stop_vox, 0));
 	checkCudaErrors(cudaEventSynchronize(stop_vox));
 	checkCudaErrors(cudaEventElapsedTime(&elapsedTime, start_vox, stop_vox));
-	printf("[Perf] Voxelization GPU time: %.1f ms\n", elapsedTime);
+	BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "[Perf] Voxelization GPU time: " << elapsedTime << " ms\n";
 
 	// If we're not using UNIFIED memory, copy the voxel table back and free all
 	if (useThrustPath) {
-		fprintf(stdout, "[Voxel Grid] Copying %llu kB to page-locked HOST memory\n", size_t(vtable_size / 1024.0f));
+		BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "[Voxel Grid] Copying " << static_cast<size_t>(vtable_size / 1024.0f) << " kB to page-locked HOST memory\n";
 		checkCudaErrors(cudaMemcpy((void*)vtable, dev_vtable, vtable_size, cudaMemcpyDefault));
-		fprintf(stdout, "[Voxel Grid] Freeing %llu kB of DEVICE memory\n", size_t(vtable_size / 1024.0f));
+		BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "[Voxel Grid] Freeing " << static_cast<size_t>(vtable_size / 1024.0f) << " kB of DEVICE memory\n";
 		checkCudaErrors(cudaFree(dev_vtable));
 	}
 
