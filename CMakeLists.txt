@@ -4,7 +4,7 @@ PROJECT(CudaVoxelize LANGUAGES CXX CUDA)
 
 FIND_PACKAGE(GLM REQUIRED)
 FIND_PACKAGE(OpenMP REQUIRED)
-FIND_PACKAGE(Boost REQUIRED COMPONENTS filesystem program_options)
+FIND_PACKAGE(Boost REQUIRED COMPONENTS filesystem program_options log)
  
 SET(CUDA_VOXELIZER_EXECUTABLE cuda_voxelizer)
 
@@ -37,33 +37,34 @@ IF(NOT Trimesh2_LIBRARY)
 ENDIF()
 
 SET(CUDA_VOXELIZER_SRCS
-  ./src/libs/helper_cuda.h
-  ./src/libs/helper_string.h
-  ./src/cpu_voxelizer.h
-  ./src/cpu_voxelizer.cpp
-  ./src/morton_LUTs.h
-  ./src/thrust_operations.cuh
-  ./src/thrust_operations.cu
-  ./src/timer.h
-  ./src/util_cuda.h
-  ./src/util_cuda.cpp
-  ./src/util_io.h
-  ./src/util_io.cpp
-  ./src/util.h
-  ./src/util.cpp
-  ./src/main.cpp
-  ./src/voxelize.cuh
-  ./src/voxelize.cu
-  ./src/prepare_model.h
-  ./src/prepare_model.cpp
-  ./src/cpu_computing.h
-  ./src/cpu_computing.cpp
-  ./src/gpu_computing.h
-  ./src/gpu_computing.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/libs/helper_cuda.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/libs/helper_string.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_voxelizer.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_voxelizer.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/morton_LUTs.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/thrust_operations.cuh
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/thrust_operations.cu
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/timer.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/util_cuda.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/util_cuda.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/util_io.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/util_io.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/util.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/util.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/voxelize.cuh
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/voxelize.cu
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/prepare_model.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/prepare_model.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_computing.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/cpu_computing.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/gpu_computing.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/gpu_computing.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/loggers.h
 )
 
 ADD_EXECUTABLE(${CUDA_VOXELIZER_EXECUTABLE} ${CUDA_VOXELIZER_SRCS})
 TARGET_COMPILE_FEATURES(${CUDA_VOXELIZER_EXECUTABLE} PUBLIC cxx_std_14)
-TARGET_INCLUDE_DIRECTORIES(	${CUDA_VOXELIZER_EXECUTABLE} PUBLIC ${Trimesh2_INCLUDE_DIR})
-TARGET_LINK_LIBRARIES ( ${CUDA_VOXELIZER_EXECUTABLE} PUBLIC ${Trimesh2_LIBRARY} PRIVATE glm PUBLIC Boost::filesystem PUBLIC Boost::program_options)
+TARGET_INCLUDE_DIRECTORIES(	${CUDA_VOXELIZER_EXECUTABLE} PRIVATE ${Trimesh2_INCLUDE_DIR})
+TARGET_LINK_LIBRARIES ( ${CUDA_VOXELIZER_EXECUTABLE} PRIVATE ${Trimesh2_LIBRARY} PRIVATE glm PRIVATE Boost::filesystem PRIVATE Boost::program_options PRIVATE Boost::log)
 TARGET_COMPILE_OPTIONS(${CUDA_VOXELIZER_EXECUTABLE} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-gencode arch=compute_${CUDA_ARCH},code=sm_${CUDA_ARCH}>)

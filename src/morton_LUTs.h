@@ -1,6 +1,6 @@
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 
 // LUT tables to copy to GPU memory for quick morton decode / encode
 static const uint32_t host_morton256_x[256] =

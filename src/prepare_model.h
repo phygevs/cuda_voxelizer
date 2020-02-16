@@ -15,5 +15,5 @@ namespace util
 {
 	std::unique_ptr<trimesh::TriMesh> prepare_model(const boost::filesystem::path& path_to_model);
 
-	voxinfo voxelization_setup(const trimesh::TriMesh* mesh, const glm::vec3& grid_sizes);
+	voxinfo voxelization_setup(const trimesh::TriMesh* mesh, const glm::uvec3& grid_sizes);
 }

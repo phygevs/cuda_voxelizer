@@ -6,12 +6,14 @@ thrust::device_vector<glm::vec3>* trianglethrust_device;
 
 // method 3: use a thrust vector
 float* meshToGPU_thrust(const trimesh::TriMesh* mesh) {
+	logging::logger_t& logger_main = logging::logger_main::get();
+
 	Timer t; t.start(); // TIMER START
 	// create vectors on heap
 	trianglethrust_host = new thrust::host_vector<glm::vec3>;
 	trianglethrust_device = new thrust::device_vector<glm::vec3>;
 	// fill host vector
-	fprintf(stdout, "[Mesh] Copying %zu triangles to Thrust host vector \n", mesh->faces.size());
+	BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "[Mesh] Copying " << mesh->faces.size() << " triangles to Thrust host vector" << endl;
 	for (size_t i = 0; i < mesh->faces.size(); i++) {
 		glm::vec3 v0 = trimesh_to_glm<trimesh::point>(mesh->vertices[mesh->faces[i][0]]);
 		glm::vec3 v1 = trimesh_to_glm<trimesh::point>(mesh->vertices[mesh->faces[i][1]]);
@@ -20,15 +22,17 @@ float* meshToGPU_thrust(const trimesh::TriMesh* mesh) {
 		trianglethrust_host->push_back(v1);
 		trianglethrust_host->push_back(v2);
 	}
-	fprintf(stdout, "[Mesh] Copying Thrust host vector to Thrust device vector \n");
+	BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "[Mesh] Copying Thrust host vector to Thrust device vector" << endl;
 	*trianglethrust_device = *trianglethrust_host;
 	t.stop();
-	fprintf(stdout, "[Mesh] Transfer time to GPU: %.1f ms \n", t.elapsed_time_milliseconds); // TIMER END
+	BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "[Mesh] Transfer time to GPU: " << t.elapsed_time_milliseconds << "ms \n"; // TIMER END
 	return (float*)thrust::raw_pointer_cast(&((*trianglethrust_device)[0]));
 }
 
 void cleanup_thrust() {
-	fprintf(stdout, "[Mesh] Freeing Thrust host and device vectors \n");
+	logging::logger_t& logger_main = logging::logger_main::get();
+
+	BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "[Mesh] Freeing Thrust host and device vectors \n";
 	if (trianglethrust_device) free(trianglethrust_device);
 	if (trianglethrust_host) free(trianglethrust_host);
 }

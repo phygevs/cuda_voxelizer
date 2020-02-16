@@ -1,11 +1,12 @@
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 #include <string>
-#include <fstream>
+#include <iosfwd>
 #include <map>
 #include <boost/program_options.hpp>
 
+#include "loggers.h"
 #include "TriMesh.h"
 #include "cuda.h"
 #include "cuda_runtime.h"
@@ -81,11 +82,14 @@ struct voxinfo {
 		unit.z = (bbox.max.z - bbox.min.z) / float(gridsize.z);
 	}
 
-	void print() {
-		fprintf(stdout, "[Voxelization] Bounding Box: (%f,%f,%f)-(%f,%f,%f) \n", bbox.min.x, bbox.min.y, bbox.min.z, bbox.max.x, bbox.max.y, bbox.max.z);
-		fprintf(stdout, "[Voxelization] Grid size: %i %i %i \n", gridsize.x, gridsize.y, gridsize.z);
-		fprintf(stdout, "[Voxelization] Triangles: %zu \n", n_triangles);
-		fprintf(stdout, "[Voxelization] Unit length: x: %f y: %f z: %f\n", unit.x, unit.y, unit.z);
+	std::ostream& operator<<(std::ostream& stream)
+	{
+		stream << "[Voxelization] Bounding Box: (" << bbox.min.x << ',' << bbox.min.y << ',' << bbox.min.z << ") - (" << bbox.max.x << ',' << bbox.max.y << ',' << bbox.max.z << std::endl
+			<< "[Voxelization] Grid size: " << gridsize.x << ' ' << gridsize.y << ' ' << gridsize.z << std::endl
+			<< "[Voxelization] Triangles: " << n_triangles << std::endl
+			<< "[Voxelization] Unit length: x: " << unit.x << " y: " << unit.y << " z: " << unit.z << std::endl;
+
+		return stream;
 	}
 };
 
@@ -157,9 +161,3 @@ inline std::string readableSize(size_t bytes) {
 	else r = std::to_string(static_cast<size_t>(bytes_d)) + " bytes";
 	return r;
 };
-
-// check if file exists
-inline bool file_exists(const std::string& name) {
-	std::ifstream f(name.c_str());
-	return f.good();
-}

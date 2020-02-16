@@ -1,8 +1,10 @@
 #include "cpu_computing.h"
 
-void cpu::compute_voxels(const boost::filesystem::path& input, const glm::vec3& grid_sizes, std::size_t vtable_size, outfmt::OutputFormat output_format)
+void cpu::compute_voxels(const boost::filesystem::path& input, const glm::uvec3& grid_sizes, std::size_t vtable_size, outfmt::OutputFormat output_format)
 {
 	using namespace boost::filesystem;
+
+	logging::logger_t& logger_main = logging::logger_main::get();
 
 	assert(vtable_size > 0);
 
@@ -10,7 +12,7 @@ void cpu::compute_voxels(const boost::filesystem::path& input, const glm::vec3& 
 
 	if (vtable.get() == nullptr)
 	{
-		cerr << "[Error] Cannot allocate memory" << endl;
+		BOOST_LOG_SEV(logger_main, logging::severity_t::error) << "Cannot allocate memory" << endl;
 		return;
 	}
 
@@ -18,16 +20,16 @@ void cpu::compute_voxels(const boost::filesystem::path& input, const glm::vec3& 
 
 	if (input_type == file_type::regular_file)
 	{
-		cout << "Voxelize model" << endl;
+		BOOST_LOG_SEV(logger_main, logging::severity_t::info) << "Voxelize model" << endl;
 
 		if (!prepare_model_and_voxelize(input, vtable.get(), vtable_size, grid_sizes, output_format))
 		{
-			cerr << "Cannot voxelize model " << input << endl;
+			BOOST_LOG_SEV(logger_main, logging::severity_t::error) << "Cannot voxelize model " << input << endl;
 		}
 	}
 	else if (input_type == file_type::directory_file)
 	{
-		cout << "Recursive voxelize all models" << endl;
+		BOOST_LOG_SEV(logger_main, logging::severity_t::info) << "Recursive voxelize all models" << endl;
 
 		auto iterator = recursive_directory_iterator(input);
 
@@ -41,11 +43,11 @@ void cpu::compute_voxels(const boost::filesystem::path& input, const glm::vec3& 
 
 				if (val != valid_extensions.cend())
 				{
-					cout << "\tFound " << local_file << endl;
+					BOOST_LOG_SEV(logger_main, logging::severity_t::info) << "Found " << local_file << endl;
 
 					if (!prepare_model_and_voxelize(local_file, vtable.get(), vtable_size, grid_sizes, output_format))
 					{
-						cerr << "Cannot voxelize model" << endl;
+						BOOST_LOG_SEV(logger_main, logging::severity_t::error) << "Cannot voxelize model" << endl;
 					}
 
 					std::memset((void*)vtable.get(), 0, vtable_size);
@@ -55,9 +57,11 @@ void cpu::compute_voxels(const boost::filesystem::path& input, const glm::vec3& 
 	}
 }
 
-bool cpu::prepare_model_and_voxelize(const boost::filesystem::path& path_to_model, unsigned int* vtable, std::size_t vtable_size, const glm::vec3& grid_sizes, const outfmt::OutputFormat output_format)
+bool cpu::prepare_model_and_voxelize(const boost::filesystem::path& path_to_model, unsigned int* vtable, std::size_t vtable_size, const glm::uvec3& grid_sizes, const outfmt::OutputFormat output_format)
 {
 	assert(grid_sizes.x == grid_sizes.y == grid_sizes.z);
+
+	logging::logger_t& logger_main = logging::logger_main::get();
 
 	Timer t;
 
@@ -67,22 +71,25 @@ bool cpu::prepare_model_and_voxelize(const boost::filesystem::path& path_to_mode
 
 	if (themesh.get() == nullptr)
 	{
-		cerr << "Cannot load mesh" << endl;
+		BOOST_LOG_SEV(logger_main, logging::severity_t::error) << "Cannot load mesh" << endl;
 		return false;
 	}
 
 	voxinfo voxelization_info{ util::voxelization_setup(themesh.get(), grid_sizes) };
 
-	fprintf(stdout, "\n## CPU VOXELISATION \n");
+	BOOST_LOG_SEV(logger_main, logging::severity_t::info) << "## CPU VOXELISATION" << endl;
+
 	cpu_voxelizer::cpu_voxelize_mesh(voxelization_info, themesh.get(), vtable, (output_format == outfmt::OutputFormat::output_morton));
 
-	fprintf(stdout, "\n## FILE OUTPUT \n");
-	string output_name = (path_to_model.parent_path() / path_to_model.stem()).string();
+	BOOST_LOG_SEV(logger_main, logging::severity_t::info) << "## FILE OUTPUT" << endl;
+
+	const string output_name{ (path_to_model.parent_path() / path_to_model.stem()).string() };
 
 	save_voxel(output_name, vtable, vtable_size, grid_sizes.x, output_format);
 
-	fprintf(stdout, "\n## STATS \n");
+	BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "## STATS" << endl;
+
 	t.stop();
-	fprintf(stdout, "[Perf] Total runtime: %.1f ms \n", t.elapsed_time_milliseconds);
+	BOOST_LOG_SEV(logger_main, logging::severity_t::debug) << "[Perf] Total runtime: " << t.elapsed_time_milliseconds << " ms" << endl;
 	return true;
 }
