@@ -13,227 +13,248 @@
 #include "cpu_computing.h"
 #include "gpu_computing.h"
 
-using namespace std;
-using namespace boost::program_options;
-using namespace boost::filesystem;
-using namespace logging;
-
-constexpr char* version_number = "v0.4.6";
-
-constexpr char* input_arg_name{ "input" };
-constexpr char* input_arg_short_name{ "i" };
-constexpr char* voxel_resol_arg_name{ "vres" };
-constexpr char* voxel_resol_arg_short_name{ "s" };
-constexpr char* output_fromat_arg_name{ "oformat" };
-constexpr char* output_fromat_arg_short_name{ "o" };
-constexpr char* cpu_arg_name{ "cpu" };
-constexpr char* trust_lib_arg_name{ "cutrust" };
-constexpr char* trust_lib_arg_short_name{ "t" };
-constexpr char* log_sett_arg_name{ "logconf" };
-constexpr char* log_sett_short_arg_name{ "c" };
+namespace cliargs
+{
+    constexpr char * version_number = "v0.4.6";
+    constexpr char * input_arg_name{ "input" };
+    constexpr char * input_arg_short_name{ "i" };
+    constexpr char * voxel_resol_arg_name{ "vres" };
+    constexpr char * voxel_resol_arg_short_name{ "s" };
+    constexpr char * output_fromat_arg_name{ "oformat" };
+    constexpr char * output_fromat_arg_short_name{ "o" };
+    constexpr char * cpu_arg_name{ "cpu" };
+    constexpr char * trust_lib_arg_name{ "cutrust" };
+    constexpr char * trust_lib_arg_short_name{ "t" };
+    constexpr char * log_sett_arg_name{ "logconf" };
+    constexpr char * log_sett_short_arg_name{ "c" };
+    constexpr char * help_short_arg_name{ "h" };
+    constexpr char * help_arg_name{ "help" };
+}
 
 // Validate output_fromat_arg_name
-void validate(boost::any& v, const std::vector<std::string>& values, outfmt::OutputFormat* target_type, int)
+void validate(boost::any & v, const std::vector<std::string> & values, outfmt::OutputFormat * target_type, int)
 {
-	using namespace boost::program_options;
+    using namespace boost::program_options;
 
-	// Make sure no previous assignment to 'a' was made.
-	validators::check_first_occurrence(v);
-	// Extract the first string from 'values'. If there is more than
-	// one string, it's an error, and exception will be thrown.
-	const std::string& s = validators::get_single_string(values);
+    // Make sure no previous assignment to 'a' was made.
+    validators::check_first_occurrence(v);
+    // Extract the first string from 'values'. If there is more than
+    // one string, it's an error, and exception will be thrown.
+    const std::string & s = validators::get_single_string(values);
 
-	try
-	{
-		v = boost::any(outfmt::formats.at(s));
-	}
-	catch (const std::out_of_range&)
-	{
-		throw validation_error(validation_error::invalid_option_value);
-	}
+    try
+    {
+        v = boost::any(outfmt::formats.at(s));
+    }
+    catch (const std::out_of_range &)
+    {
+        throw validation_error(validation_error::invalid_option_value);
+    }
 }
 
-void init_logg_settings_from_file(const path& path_to_config)
+void init_logg_settings_from_file(const boost::filesystem::path & path_to_config)
 {
-	std::ifstream settings(path_to_config.string());
+    std::ifstream settings(path_to_config.string());
 
-	if (!settings.is_open())
-	{
-		cerr << "Could not open " << path_to_config << std::endl;
-	}
+    if (!settings.is_open())
+    {
+        cerr << "Could not open " << path_to_config << std::endl;
+    }
 
-	// Read the settings and initialize logging library
-	boost::log::init_from_stream(settings);
+    // Read the settings and initialize logging library
+    boost::log::init_from_stream(settings);
 
-	settings.close();
+    settings.close();
 
-	// Add some attributes
-	boost::log::core::get()->add_global_attribute("TimeStamp", boost::log::attributes::local_clock());
+    // Add some attributes
+    boost::log::core::get()->add_global_attribute("TimeStamp", boost::log::attributes::local_clock());
 }
 
-auto parse_cli_args(int argc, char** argv)
+auto parse_cli_args(int argc, char ** argv)
 {
-	using namespace outfmt;
+    using namespace outfmt;
+    using namespace std;
+    using namespace cliargs;
+    using namespace boost::program_options;
 
-	string model{ input_arg_name };
-	model += ',';
-	model += input_arg_short_name;
+    string model{ input_arg_name };
+    model += ',';
+    model += input_arg_short_name;
 
-	string voxel_resol{ voxel_resol_arg_name };
-	voxel_resol += ',';
-	voxel_resol += voxel_resol_arg_short_name;
+    string voxel_resol{ voxel_resol_arg_name };
+    voxel_resol += ',';
+    voxel_resol += voxel_resol_arg_short_name;
 
-	string format_arg{ output_fromat_arg_name };
-	format_arg += ',';
-	format_arg += output_fromat_arg_short_name;
+    string format_arg{ output_fromat_arg_name };
+    format_arg += ',';
+    format_arg += output_fromat_arg_short_name;
 
-	string cuda_trust_arg{ trust_lib_arg_name };
-	cuda_trust_arg += ',';
-	cuda_trust_arg += trust_lib_arg_short_name;
+    string cuda_trust_arg{ trust_lib_arg_name };
+    cuda_trust_arg += ',';
+    cuda_trust_arg += trust_lib_arg_short_name;
 
-	string log_sett_arg{ log_sett_arg_name };
-	log_sett_arg += ',';
-	log_sett_arg += log_sett_short_arg_name;
+    string log_sett_arg{ log_sett_arg_name };
+    log_sett_arg += ',';
+    log_sett_arg += log_sett_short_arg_name;
 
-	ostringstream description;
-	description << "## CUDA VOXELIZER\n" << "CUDA Voxelizer" << version_number << " by Jeroen Baert" << endl << "Original code: https://github.com/Forceflow/cuda_voxelizer - mail@jeroen-baert.be" << endl << "Fork: https://github.com/KernelA/cuda_voxelizer" << endl << "Example: cuda_voxelizer -i bunny.ply -s 512 -t" << endl << "Options";
+    string help_arg{ help_arg_name };
+    help_arg += ',';
+    help_arg += help_short_arg_name;
 
-	options_description desc{ description.str() };
+    ostringstream description;
+    description << "## CUDA VOXELIZER\n" << "CUDA Voxelizer" << version_number << " by Jeroen Baert" << endl << "Original code: https://github.com/Forceflow/cuda_voxelizer - mail@jeroen-baert.be" << endl << "Fork: https://github.com/KernelA/cuda_voxelizer" << endl << "Example: cuda_voxelizer -i bunny.ply -s 256 -t" << endl << "Options";
 
-	ostringstream all_formats;
+    options_description desc{ description.str() };
 
-	all_formats << "output format: ";
+    ostringstream all_formats;
 
-	for (const auto& name : formats)
-	{
-		all_formats << name.first << ' ';
-	}
+    all_formats << "output format: ";
 
-	desc.add_options()
-		("help,h", "Print help")
-		(model.c_str(), value<string>(), "<path to model file: .ply, .obj, .3ds> (required). If it is directory then recursive voxelize all models in current directory in all subdirectories.")
-		(voxel_resol.c_str(), value<int>()->default_value(128), "<voxelization grid size, power of 2: 8 -> 512, 1024, ... >")
-		(format_arg.c_str(), value<OutputFormat>()->default_value(OutputFormat::output_binvox, "binvox"), all_formats.str().c_str())
-		(cuda_trust_arg.c_str(), bool_switch(), "Force using CUDA Thrust Library (possible speedup / throughput improvement)")
-		(cpu_arg_name, bool_switch(), "Force voxelization on the CPU instead of GPU.For when a CUDA device is not detected / compatible, or for very small models where GPU call overhead is not worth it")
-		(log_sett_arg.c_str(), value<string>()->default_value("logsettings.ini"), "Path to file with log config. See https://www.boost.org/doc/libs/1_72_0/libs/log/doc/html/log/detailed/utilities.html#log.detailed.utilities.setup.settings_file")
-		;
+    for (const auto & name : formats)
+    {
+        all_formats << name.first << ' ';
+    }
 
-	variables_map vm;
-	store(parse_command_line(argc, argv, desc), vm);
-	notify(vm);
+    desc.add_options()
+        (help_arg.c_str(), "Print help")
+        (model.c_str(), value<string>(), "<path to model file: .ply, .obj, .3ds> (required). If it is directory then recursive voxelize all models in current directory in all subdirectories.")
+        (voxel_resol.c_str(), value<int>()->default_value(128), "<voxelization grid size, power of 2: 8 -> 512, 1024, ... >")
+        (format_arg.c_str(), value<OutputFormat>()->default_value(OutputFormat::output_binvox, "binvox"), all_formats.str().c_str())
+        (cuda_trust_arg.c_str(), bool_switch(), "Force using CUDA Thrust Library (possible speedup / throughput improvement). It is recommended to use this for only one file.")
+        (cpu_arg_name, bool_switch(), "Force voxelization on the CPU instead of GPU.For when a CUDA device is not detected / compatible, or for very small models where GPU call overhead is not worth it")
+        (log_sett_arg.c_str(), value<string>()->default_value("logsettings.ini"), "Path to file with log config. See https://www.boost.org/doc/libs/1_72_0/libs/log/doc/html/log/detailed/utilities.html#log.detailed.utilities.setup.settings_file")
+        ;
 
-	return make_tuple(vm, desc);
+    variables_map vm;
+    store(parse_command_line(argc, argv, desc), vm);
+    notify(vm);
+
+    return make_tuple(vm, desc);
 }
 
-bool validate_args(const variables_map& args, const options_description& desc)
+bool validate_args(const boost::program_options::variables_map & args, const boost::program_options::options_description & desc)
 {
-	if (args.count(input_arg_name))
-	{
-		path input_file{ args[input_arg_name].as<string>() };
+    using namespace cliargs;
+    using namespace boost::filesystem;
 
-		auto input_type{ status(input_file).type() };
+    if (args.count(input_arg_name))
+    {
+        path input_file{ args[input_arg_name].as<string>() };
 
-		if (input_type != file_type::regular_file && input_type != file_type::directory_file)
-		{
-			cerr << input_file << " is not file or directory. It may be no exist." << endl;
-			return false;
-		}
-	}
+        auto input_type{ status(input_file).type() };
 
-	if (args.count(log_sett_arg_name))
-	{
-		path log_sett_file{ args[log_sett_arg_name].as<string>() };
+        if (input_type != file_type::regular_file && input_type != file_type::directory_file)
+        {
+            cerr << input_file << " is not file or directory. It may be no exist." << endl;
+            return false;
+        }
+    }
+    else
+    {
+        cerr << "Missing required arguments " << input_arg_name << ". See  --help" << endl;
+        return false;
+    }
 
-		if (status(log_sett_file).type() != file_type::regular_file)
-		{
-			cerr << log_sett_file << " is not file. It may be no exist." << endl;
-			return false;
-		}
-	}
+    if (args.count(log_sett_arg_name))
+    {
+        path log_sett_file{ args[log_sett_arg_name].as<string>() };
 
-	int voxel_resol{ args[voxel_resol_arg_name].as<int>() };
+        if (status(log_sett_file).type() != file_type::regular_file)
+        {
+            cerr << log_sett_file << " is not file. It may be no exist." << endl;
+            return false;
+        }
+    }
 
-	if (voxel_resol <= 0)
-	{
-		cerr << "Voxel grid size order must be positive. Actual value is " << voxel_resol << endl;
-		return false;
-	}
+    int voxel_resol{ args[voxel_resol_arg_name].as<int>() };
 
-	return true;
+    if (voxel_resol <= 0)
+    {
+        cerr << "Voxel grid size order must be positive. Actual value is " << voxel_resol << endl;
+        return false;
+    }
+
+    return true;
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char * argv[])
 {
-	variables_map args;
+    using boost::program_options::variables_map;
+    using boost::filesystem::path;
+    using boost::program_options::error;
+    using namespace cliargs;
+    using namespace logging;
 
-	try
-	{
-		auto res_tuple = parse_cli_args(argc, argv);
-		args = get<0>(res_tuple);
-		auto desc = get<1>(res_tuple);
+    variables_map args;
 
-		if (args.count("help"))
-		{
-			cout << desc << endl;
-			return 0;
-		}
+    try
+    {
+        auto res_tuple = parse_cli_args(argc, argv);
+        args = get<0>(res_tuple);
+        auto desc = get<1>(res_tuple);
 
-		if (!validate_args(args, desc))
-		{
-			cout << desc << endl;
-			return 1;
-		}
-	}
-	catch (error & err)
-	{
-		cerr << err.what() << endl;
-		return 1;
-	}
+        if (args.count(help_arg_name))
+        {
+            cout << desc << endl;
+            return 0;
+        }
 
-	init_logg_settings_from_file(path{ args[log_sett_arg_name].as<string>() });
+        if (!validate_args(args, desc))
+        {
+            cout << desc << endl;
+            return 1;
+        }
+    }
+    catch (error & err)
+    {
+        cerr << err.what() << endl;
+        return 1;
+    }
 
-	logging::logger_t& logger_main = logging::logger_main::get();
+    init_logg_settings_from_file(path{ args[log_sett_arg_name].as<string>() });
 
-	path input{ args[input_arg_name].as<string>() };
-	bool forceCPU{ args[cpu_arg_name].as<bool>() };
-	bool useThrustPath{ args[trust_lib_arg_name].as<bool>() };
-	int gridsize{ args[voxel_resol_arg_name].as<int>() };
-	outfmt::OutputFormat outputformat{ args[output_fromat_arg_name].as<outfmt::OutputFormat >() };
+    logging::logger_t & logger_main = logging::logger_main::get();
 
-	bool cuda_ok{ false };
+    path input{ args[input_arg_name].as<string>() };
+    bool forceCPU{ args[cpu_arg_name].as<bool>() };
+    bool useThrustPath{ args[trust_lib_arg_name].as<bool>() };
+    int gridsize{ args[voxel_resol_arg_name].as<int>() };
+    outfmt::OutputFormat outputformat{ args[output_fromat_arg_name].as<outfmt::OutputFormat >() };
 
-	if (!forceCPU)
-	{
-		// SECTION: Try to figure out if we have a CUDA-enabled GPU
-		BOOST_LOG_SEV(logger_main, severity_t::info) << "## CUDA INIT" << endl;
+    bool cuda_ok{ false };
 
-		cuda_ok = initCuda();
+    if (!forceCPU)
+    {
+        // SECTION: Try to figure out if we have a CUDA-enabled GPU
+        BOOST_LOG_SEV(logger_main, severity_t::info) << "## CUDA INIT" << endl;
 
-		if (cuda_ok) {
-			BOOST_LOG_SEV(logger_main, severity_t::info) << "CUDA GPU found" << endl;
-		}
-		else {
-			BOOST_LOG_SEV(logger_main, severity_t::info) << "CUDA GPU not found" << endl;
-			forceCPU = true;
-		}
-	}
+        cuda_ok = initCuda();
 
-	glm::uvec3 grid_sizes{ gridsize, gridsize, gridsize };
+        if (cuda_ok)
+        {
+            BOOST_LOG_SEV(logger_main, severity_t::info) << "CUDA GPU found" << endl;
+        }
+        else {
+            BOOST_LOG_SEV(logger_main, severity_t::info) << "CUDA GPU not found" << endl;
+            forceCPU = true;
+        }
+    }
 
-	// Compute space needed to hold voxel table (1 voxel / bit)
-	size_t vtable_size = static_cast<size_t>(ceil(static_cast<size_t>(grid_sizes.x)* static_cast<size_t>(grid_sizes.y)* static_cast<size_t>(grid_sizes.z)) / 8.0f);
+    glm::uvec3 grid_sizes{ gridsize, gridsize, gridsize };
 
-	if (!forceCPU && cuda_ok)
-	{
-		gpu::compute_voxels(input, grid_sizes, vtable_size, outputformat, useThrustPath);
-	}
-	else
-	{
-		cpu::compute_voxels(input, grid_sizes, vtable_size, outputformat);
-	}
+    // Compute space needed to hold voxel table (1 voxel / bit)
+    size_t vtable_size = static_cast<size_t>(ceil(static_cast<size_t>(grid_sizes.x) * static_cast<size_t>(grid_sizes.y) * static_cast<size_t>(grid_sizes.z)) / 8.0f);
 
-	boost::log::core::get()->remove_all_sinks();
+    if (!forceCPU && cuda_ok)
+    {
+        gpu::compute_voxels(input, grid_sizes, vtable_size, outputformat, useThrustPath);
+    }
+    else
+    {
+        cpu::compute_voxels(input, grid_sizes, vtable_size, outputformat);
+    }
 
-	return 0;
+    boost::log::core::get()->remove_all_sinks();
+
+    return 0;
 }
