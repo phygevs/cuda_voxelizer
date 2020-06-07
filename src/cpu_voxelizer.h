@@ -6,6 +6,7 @@
 #include "util.h"
 #include "morton_LUTs.h"
 
-namespace cpu_voxelizer {
-	void cpu_voxelize_mesh(voxinfo info, trimesh::TriMesh* themesh, unsigned int* voxel_table, bool morton_order);
+namespace cpu_voxelizer
+{
+    void cpu_voxelize_mesh(voxinfo info, trimesh::TriMesh * themesh, unsigned int * voxel_table, bool morton_order);
 }
