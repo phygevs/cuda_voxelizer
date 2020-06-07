@@ -10,7 +10,7 @@ void gpu::compute_voxels(const boost::filesystem::path & input, const glm::uvec3
 
     logging::logger_t & logger_main = logging::logger_main::get();
 
-    auto cuda_deleter = [use_trust, &logger_main](unsigned int * ptr) -> void
+    auto cuda_deleter = [use_trust](unsigned int * ptr) -> void
     {
         if (use_trust)
         {
