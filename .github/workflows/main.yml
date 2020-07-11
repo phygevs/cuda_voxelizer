@@ -15,28 +15,41 @@ on:
 jobs:
   # This workflow contains a single job called "build"
   build:
+    runs-on: ubuntu-18.04
+    env:
+      CUDA_ARCH: 30
     # The type of runner that the job will run on
-    container: cuda:${{ github.event.inputs.cuda-version }}-devel-ubuntu18.04
+    container: nvidia/cuda:${{ github.event.inputs.cuda-version }}-devel-ubuntu18.04
     
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
     - name: Clone repository
       uses: actions/checkout@v2
       with:
-        ref: universal-cmake   
+        ref: universal-cmake  
     # Runs a set of commands using the runners shell
     - name: Install GLM and OpenMP
-      run: |
-        # GLM: We can get this from the standard Ubuntu repository, any recent version will do
-        sudo apt install -y libglm-dev libgomp1
-        # TRIMESH: Get dependencies from standard repos, and build project from git using makefile
-        sudo apt-get install -y mesa-common-dev libglu1-mesa-dev libxi-dev 
-    - name: Clone Trimesh2
-      uses: actions/checkout@v2
-      with:
-        repository: 'Forceflow/trimesh2.git'
-        ref: 2020.03.04      
+      run: apt update && apt install -y libglm-dev libgomp1
     - name: Build Trimesh2
       run: |
-        sudo apt-get install -y mesa-common-dev libglu1-mesa-dev libxi-dev 
-        cd trimesh2 && make all -j 2 && cd ..
+        apt update
+        apt install -y git mesa-common-dev libglu1-mesa-dev libxi-dev 
+        git clone -b 2020.03.04 https://github.com/Forceflow/trimesh2.git ../trimesh2
+        cd ../trimesh2 && make all -j 2 && cd -
+    - name: Install CMake
+      run: |
+        apt install -y wget
+        wget https://github.com/Kitware/CMake/releases/download/v3.13.0/cmake-3.13.0-Linux-x86_64.sh -q -O ./cmake-install.sh 
+        chmod u+x ./cmake-install.sh
+        mkdir ./cmake
+        ./cmake-install.sh --skip-license --prefix=./cmake
+        rm ./cmake-install.sh
+    - name: Build cuda_voxelizer
+      run: |
+        mkdir ./build
+        cd ./build
+        ../cmake/bin/cmake -DTrimesh2_INCLUDE_DIR="../../trimesh2/include" -DTrimesh2_LINK_DIR="../../trimesh2/lib.Linux64" -DCUDA_ARCH=${CUDA_ARCH} ..
+        ../cmake/bin/cmake --build . -j 2
+    - name: Test
+      run: ./build/cuda_voxelizer -f ./test_models/bunny.OBJ -s 64 -cpu
+  
