@@ -4,7 +4,7 @@ PROJECT(CudaVoxelize LANGUAGES CXX CUDA)
 
 FIND_PACKAGE(glm REQUIRED)
 FIND_PACKAGE(OpenMP REQUIRED)
-FIND_PACKAGE(Boost 1.7 REQUIRED COMPONENTS filesystem program_options log log_setup)
+FIND_PACKAGE(Boost REQUIRED COMPONENTS filesystem program_options log log_setup)
  
 SET(CUDA_VOXELIZER_EXECUTABLE cuda_voxelizer)
 
